@@ -16,10 +16,23 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
 
   // Fetch invoices from backend
   useEffect(() => {
+    console.log('Fetching invoices from backend...');
     fetch('https://backend-invoice-gen.onrender.com/api/invoices')
-      .then(res => res.json())
-      .then(data => setInvoices(data))
-      .catch(() => setInvoices([]));
+      .then(res => {
+        console.log('Response status:', res.status);
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        return res.json();
+      })
+      .then(data => {
+        console.log('Fetched invoices:', data);
+        setInvoices(data);
+      })
+      .catch((error) => {
+        console.error('Error fetching invoices:', error);
+        setInvoices([]);
+      });
   }, []);
 
   // Filtered data

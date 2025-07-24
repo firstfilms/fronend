@@ -36,6 +36,7 @@ export default function CreateInvoicePage() {
   const uploadToBackend = async () => {
     if (!invoices.length) return;
     try {
+      console.log('Uploading to backend...');
       // Find the file input
       const fileInput = document.getElementById('excel-upload') as HTMLInputElement;
       const file = fileInput?.files?.[0];
@@ -47,20 +48,26 @@ export default function CreateInvoicePage() {
         method: 'POST',
         body: formData,
       });
-      if (!res.ok) throw new Error('Failed to upload invoice');
+      console.log('Upload response status:', res.status);
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('Upload error:', errorText);
+        throw new Error('Failed to upload invoice');
+      }
       // After upload, fetch the latest invoices from backend
       const fetchRes = await fetch('https://backend-invoice-gen.onrender.com/api/invoices');
+      console.log('Fetch response status:', fetchRes.status);
       if (fetchRes.ok) {
         const backendAll = await fetchRes.json();
         const { invoiceIds } = await res.json();
+        console.log('Uploaded invoice IDs:', invoiceIds);
         const newBackendInvoices = backendAll.filter((inv: { invoiceId: string }) => invoiceIds.includes(inv.invoiceId));
         setBackendInvoices(newBackendInvoices.map((inv: { data: any, invoiceId: string }) => ({ ...inv.data, invoiceId: inv.invoiceId })));
         setSelectedIdx(0);
         setShowPreview(true);
       }
     } catch (err) {
-      // Optionally handle error
-      // console.error(err);
+      console.error('Upload error:', err);
     }
   };
 
