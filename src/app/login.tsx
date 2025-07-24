@@ -37,7 +37,13 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100">
+      <img
+        src="/inovice_formatting/logo_wbg.png"
+        alt="Logo"
+        className="w-40 h-auto mb-6 drop-shadow-lg"
+        style={{ maxWidth: 180 }}
+      />
       <form
         onSubmit={handleLogin}
         className="bg-white shadow-xl rounded-lg p-8 w-full max-w-sm flex flex-col gap-4 border border-gray-200"

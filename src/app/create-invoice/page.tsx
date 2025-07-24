@@ -43,13 +43,13 @@ export default function CreateInvoicePage() {
       const formData = new FormData();
       formData.append('excel', file);
       formData.append('invoiceData', JSON.stringify(invoices)); // send all invoices as array
-      const res = await fetch('http://localhost:5000/api/invoice-upload', {
+      const res = await fetch('https://backend-invoice-gen.onrender.com/api/invoice-upload', {
         method: 'POST',
         body: formData,
       });
       if (!res.ok) throw new Error('Failed to upload invoice');
       // After upload, fetch the latest invoices from backend
-      const fetchRes = await fetch('http://localhost:5000/api/invoices');
+      const fetchRes = await fetch('https://backend-invoice-gen.onrender.com/api/invoices');
       if (fetchRes.ok) {
         const backendAll = await fetchRes.json();
         const { invoiceIds } = await res.json();

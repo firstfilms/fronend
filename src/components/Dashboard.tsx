@@ -16,7 +16,7 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
 
   // Fetch invoices from backend
   useEffect(() => {
-    fetch('http://localhost:5000/api/invoices')
+    fetch('https://backend-invoice-gen.onrender.com/api/invoices')
       .then(res => res.json())
       .then(data => setInvoices(data))
       .catch(() => setInvoices([]));
@@ -42,7 +42,7 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
   const handleSaveEdit = async (updated: any) => {
     if (!editInvoice?._id) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/invoices/${editInvoice._id}`, {
+      const res = await fetch(`https://backend-invoice-gen.onrender.com/api/invoices/${editInvoice._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ data: updated }),
@@ -59,7 +59,7 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
   const handleDelete = async (inv: any) => {
     if (!inv?._id) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/invoices/${inv._id}`, { method: 'DELETE' });
+      const res = await fetch(`https://backend-invoice-gen.onrender.com/api/invoices/${inv._id}`, { method: 'DELETE' });
       if (res.ok) setInvoices(prev => prev.filter(i => i._id !== inv._id));
     } catch {}
   };
