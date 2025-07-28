@@ -79,6 +79,7 @@ interface InvoiceData {
   placeOfService?: string;
   businessTerritory?: string;
   invoiceNo?: string;
+  invoiceId?: string; // Added for invoiceId
   invoiceDate?: string;
   movieName?: string;
   movieVersion?: string;
@@ -131,6 +132,7 @@ const defaultInvoice = {
   placeOfService: "MAHARASHTRA",
   businessTerritory: "MUMBAI",
   invoiceNo: "NV060",
+  invoiceId: "NV060",
   invoiceDate: "2025-06-23",
   movieName: "NARIVETTA",
   movieVersion: "2D",
@@ -276,7 +278,7 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
     const x = (pageWidth - pdfWidth) / 2;
     const y = 40;
     pdf.addImage(imgData, "PNG", x, y, pdfWidth, pdfHeight);
-    pdf.save(`Invoice_${invoice.invoiceNo}.pdf`);
+    pdf.save(`Invoice_${invoice.invoiceNo || invoice.invoiceId || 'unknown'}.pdf`);
     // Clean up
     reactRoot.unmount();
     document.body.removeChild(hiddenDiv);

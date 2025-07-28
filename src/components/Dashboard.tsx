@@ -91,7 +91,7 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
     document.body.appendChild(hiddenDiv);
     const reactRoot = createRoot(hiddenDiv);
     reactRoot.render(
-      <InvoicePreview data={inv.data || inv} showDownloadButton={false} isPdfExport={true} />
+      <InvoicePreview data={getInvoiceData(inv)} showDownloadButton={false} isPdfExport={true} />
     );
     await new Promise(r => setTimeout(r, 400));
     const images = Array.from(hiddenDiv.querySelectorAll('img'));
@@ -112,7 +112,7 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
     const x = (pageWidth - pdfWidth) / 2;
     const y = 40;
     pdf.addImage(imgData, 'PNG', x, y, pdfWidth, pdfHeight);
-    pdf.save(`Invoice_${inv.data?.invoiceNo || inv.invoiceNo}.pdf`);
+    pdf.save(`Invoice_${inv.data?.invoiceNo || inv.data?.invoiceId || inv.invoiceNo || inv.invoiceId}.pdf`);
     reactRoot.unmount();
     document.body.removeChild(hiddenDiv);
   };

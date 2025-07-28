@@ -111,7 +111,7 @@ export default function CreateInvoicePage() {
     const x = (pageWidth - pdfWidth) / 2;
     const y = 40;
     pdf.addImage(imgData, "PNG", x, y, pdfWidth, pdfHeight);
-    pdf.save(`Invoice_${inv.invoiceNo || idx + 1}.pdf`);
+    pdf.save(`Invoice_${inv.invoiceNo || inv.invoiceId || idx + 1}.pdf`);
     reactRoot.unmount();
     document.body.removeChild(hiddenDiv);
   };

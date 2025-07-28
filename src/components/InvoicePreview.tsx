@@ -147,8 +147,8 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
   const centre = data.centre ?? "MUMBAI";
   const placeOfService = data.placeOfService ?? "MAHARASHTRA";
   const businessTerritory = data.businessTerritory ?? "MUMBAI";
-  // Only use invoiceId for Invoice No, no fallback/default
-  const invoiceNo = data.invoiceId;
+  // Use invoiceId or invoiceNo for Invoice No, with fallback
+  const invoiceNo = data.invoiceId || data.invoiceNo;
   const invoiceDate = data.invoiceDate ?? "23/06/2025";
   const movieName = data.movieName ?? "NARIVETTA";
   const movieVersion = data.movieVersion ?? "2D";
@@ -239,7 +239,7 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
     const x = (pageWidth - pdfWidth) / 2;
     const y = 40;
     pdf.addImage(imgData, "PNG", x, y, pdfWidth, pdfHeight);
-    pdf.save(`Invoice_${data.invoiceNo}.pdf`);
+    pdf.save(`Invoice_${data.invoiceNo || data.invoiceId || 'unknown'}.pdf`);
 
     // Clean up
     reactRoot.unmount();
