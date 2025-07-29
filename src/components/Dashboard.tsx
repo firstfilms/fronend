@@ -7,7 +7,7 @@ import EditPreview from './Edit_preview';
 const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
   const [invoices, setInvoices] = useState<any[]>([]);
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('Monthly');
+  const [filter, setFilter] = useState('Show All');
   const [showFilter, setShowFilter] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
@@ -35,15 +35,118 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
       });
   }, []);
 
-  // Filtered data
-    // Filtered data
+  // Helper function to parse date safely
+  const parseDate = (dateString: string) => {
+    if (!dateString) return null;
+    
+    // Handle different date formats
+    let date: Date | null = null;
+    
+    // Try parsing as ISO string (backend format)
+    if (dateString.includes('T') || dateString.includes('Z')) {
+      date = new Date(dateString);
+    }
+    // Try parsing DD/MM/YYYY format
+    else if (dateString.includes('/')) {
+      const parts = dateString.split('/');
+      if (parts.length === 3) {
+        date = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+      }
+    }
+    // Try parsing DD-MM-YYYY format
+    else if (dateString.includes('-')) {
+      const parts = dateString.split('-');
+      if (parts.length === 3) {
+        // Check if it's YYYY-MM-DD format
+        if (parts[0].length === 4) {
+          date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        } else {
+          // DD-MM-YYYY format
+          date = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+        }
+      }
+    }
+    
+    return date && !isNaN(date.getTime()) ? date : null;
+  };
+
+  // Helper function to check if date is today
+  const isToday = (date: Date) => {
+    const today = new Date();
+    return (
+      date.getDate() === today.getDate() &&
+      date.getMonth() === today.getMonth() &&
+      date.getFullYear() === today.getFullYear()
+    );
+  };
+
+  // Helper function to check if date is in current week
+  const isThisWeek = (date: Date) => {
+    const today = new Date();
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - today.getDay());
+    weekStart.setHours(0, 0, 0, 0);
+    
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+    
+    return date >= weekStart && date <= weekEnd;
+  };
+
+  // Helper function to check if date is in current month
+  const isThisMonth = (date: Date) => {
+    const today = new Date();
+    return (
+      date.getMonth() === today.getMonth() &&
+      date.getFullYear() === today.getFullYear()
+    );
+  };
+
+  // Filtered data based on search and filter
   const filteredInvoices = invoices.filter(inv => {
     const clientName = inv.data?.clientName || inv.clientName || '';
     const invoiceNo = inv.data?.invoiceNo || inv.invoiceNo || '';
-    return (
+    const invoiceDate = inv.data?.invoiceDate || inv.invoiceDate || '';
+    const createdAt = inv.createdAt || '';
+    
+    // Search filter
+    const matchesSearch = (
       clientName.toLowerCase().includes(search.toLowerCase()) ||
       invoiceNo.toLowerCase().includes(search.toLowerCase())
     );
+    
+    if (!matchesSearch) return false;
+    
+    // Date filter
+    if (filter === 'Show All') {
+      return true; // Show all invoices
+    }
+    
+    // Parse the invoice date
+    const invoiceDateObj = parseDate(invoiceDate) || parseDate(createdAt);
+    
+    if (!invoiceDateObj) {
+      // If no valid date found, show in "Show All" only
+      return filter === 'Show All';
+    }
+    
+    let matchesFilter = false;
+    switch (filter) {
+      case 'Daily':
+        matchesFilter = isToday(invoiceDateObj);
+        break;
+      case 'Weekly':
+        matchesFilter = isThisWeek(invoiceDateObj);
+        break;
+      case 'Monthly':
+        matchesFilter = isThisMonth(invoiceDateObj);
+        break;
+      default:
+        matchesFilter = true;
+    }
+    
+    return matchesFilter;
   });
 
   // Get invoice data for InvoicePreview
@@ -79,8 +182,30 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
     } catch {}
   };
 
+  // Close filter dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.filter-dropdown')) {
+        setShowFilter(false);
+      }
+    };
+
+    if (showFilter) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showFilter]);
+
   // Add a download handler for PDF
   const handleDownloadPDF = async (inv: any) => {
+    // Get the exact invoice data that will be used in preview
+    const invoiceData = getInvoiceData(inv);
+    const exactInvoiceNo = invoiceData.invoiceId || invoiceData.invoiceNo || inv.invoiceId;
+    
     // Dynamically import ReactDOM for SSR safety
     const { createRoot } = await import('react-dom/client');
     let hiddenDiv = document.createElement('div');
@@ -92,7 +217,7 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
     document.body.appendChild(hiddenDiv);
     const reactRoot = createRoot(hiddenDiv);
     reactRoot.render(
-      <InvoicePreview data={getInvoiceData(inv)} showDownloadButton={false} isPdfExport={true} />
+      <InvoicePreview data={{ ...invoiceData, invoiceNo: exactInvoiceNo }} showDownloadButton={false} isPdfExport={true} />
     );
     await new Promise(r => setTimeout(r, 400));
     const images = Array.from(hiddenDiv.querySelectorAll('img'));
@@ -113,9 +238,6 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
     const x = (pageWidth - pdfWidth) / 2;
     const y = 40;
     pdf.addImage(imgData, 'PNG', x, y, pdfWidth, pdfHeight);
-    // Get the exact invoice number that will be displayed
-    const invoiceData = getInvoiceData(inv);
-    const exactInvoiceNo = invoiceData.invoiceId || invoiceData.invoiceNo || invoiceData["Invoice No"] || "INV001";
     pdf.save(`Invoice_${exactInvoiceNo}.pdf`);
     reactRoot.unmount();
     document.body.removeChild(hiddenDiv);
@@ -162,7 +284,7 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
             onChange={e => setSearch(e.target.value)}
             className="w-full px-5 py-3 rounded-xl border border-orange-200 focus:outline-none focus:ring-2 focus:ring-orange-400 text-lg bg-white shadow-sm placeholder-gray-400 text-gray-800 font-medium"
           />
-          <div className="relative">
+          <div className="relative filter-dropdown">
             <button
               className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold px-5 py-3 rounded-xl shadow transition text-base"
               onClick={() => setShowFilter(v => !v)}
@@ -173,7 +295,7 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
             </button>
             {showFilter && (
               <div className="absolute right-0 mt-2 w-36 bg-white border border-orange-200 rounded-lg shadow-lg z-20">
-                {['Daily', 'Weekly', 'Monthly'].map(option => (
+                {['Show All', 'Daily', 'Weekly', 'Monthly'].map(option => (
                   <button
                     key={option}
                     className={`block w-full text-left px-4 py-2 text-gray-700 hover:bg-orange-50 ${filter === option ? 'font-bold text-orange-600' : ''}`}
@@ -186,6 +308,21 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
             )}
           </div>
         </div>
+
+        {/* Filter Status */}
+        {(search || filter !== 'Show All') && (
+          <div className="mb-4 flex items-center gap-2 text-sm text-gray-600">
+            <span>Showing {filteredInvoices.length}</span>
+            {search && <span>• Search: "{search}"</span>}
+            {filter !== 'Show All' && <span>• Filter: {filter}</span>}
+            <button
+              onClick={() => { setSearch(''); setFilter('Show All'); }}
+              className="text-orange-600 hover:text-orange-700 underline"
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
 
         {/* Table with only vertical scroll, full width, sticky header */}
         <div className="bg-white rounded-2xl shadow-2xl border border-orange-100 flex-1 w-full">

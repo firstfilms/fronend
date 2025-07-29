@@ -202,12 +202,23 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
     return 0;
   };
   const tableRows = Array.isArray(invoice.table) ? invoice.table : [];
-  const totalShowVal = tableRows.reduce((sum, row) => sum + safeNumber(row.show), 0);
-  const totalAudVal = tableRows.reduce((sum, row) => sum + safeNumber(row.aud), 0);
-  const totalCollectionVal = tableRows.reduce((sum, row) => sum + safeNumber(row.collection), 0);
+  
+  // Calculate totals from table rows - ALWAYS calculate from actual data
+  const calculatedTotalShow = tableRows.reduce((sum, row) => sum + safeNumber(row.show), 0);
+  const calculatedTotalAud = tableRows.reduce((sum, row) => sum + safeNumber(row.aud), 0);
+  const calculatedTotalCollection = tableRows.reduce((sum, row) => sum + safeNumber(row.collection), 0);
+  
+  // Use calculated totals (more accurate) or fallback to provided totals
+  const totalShowVal = calculatedTotalShow || safeNumber(invoice.totalShow) || 0;
+  const totalAudVal = calculatedTotalAud || safeNumber(invoice.totalAud) || 0;
+  const totalCollectionVal = calculatedTotalCollection || safeNumber(invoice.totalCollection) || 0;
+  
+  // Calculate deductions
   const showTaxVal = safeNumber(invoice.showTax) || 0;
   const otherDeductionVal = safeNumber(invoice.otherDeduction) || 0;
   const totalDeduction = showTaxVal + otherDeductionVal;
+  
+  // Calculate net collection accurately
   const netCollection = totalCollectionVal - totalDeduction;
   const distPercent = safeNumber(invoice.distributionPercent) || 45;
   const distConsideration = netCollection * (distPercent / 100);
@@ -242,6 +253,9 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
 
   // PDF Export
   const handleDownloadPDF = async () => {
+    // Get the exact invoice number that is displayed in the preview
+    const exactInvoiceNo = invoice.invoiceNo || invoice.invoiceId || 'NV060';
+    
     // Create a hidden div for InvoicePreview
     let hiddenDiv = document.createElement('div');
     hiddenDiv.style.position = 'fixed';
@@ -250,12 +264,13 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
     hiddenDiv.style.width = '800px';
     hiddenDiv.style.background = '#fff';
     document.body.appendChild(hiddenDiv);
-    // Render InvoicePreview into hiddenDiv
+    // Render InvoicePreview into hiddenDiv with exact invoice number
     const reactRoot = createRoot(hiddenDiv);
     reactRoot.render(
       <InvoicePreview
         data={{
           ...invoice,
+          invoiceNo: exactInvoiceNo, // Ensure exact invoice number is used
           distributionPercent: String(invoice.distributionPercent ?? ''),
           cgstRate: String(invoice.cgstRate ?? ''),
           sgstRate: String(invoice.sgstRate ?? ''),
@@ -278,8 +293,6 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
     const x = (pageWidth - pdfWidth) / 2;
     const y = 40;
     pdf.addImage(imgData, "PNG", x, y, pdfWidth, pdfHeight);
-    // Get the exact invoice number that will be displayed
-    const exactInvoiceNo = invoice.invoiceNo || invoice.invoiceId || "INV001";
     pdf.save(`Invoice_${exactInvoiceNo}.pdf`);
     // Clean up
     reactRoot.unmount();
@@ -544,7 +557,7 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
               <img src="/inovice_formatting/Stamp_mum.png" alt="Stamp" style={{ width: 120, height: 120, objectFit: 'contain' }} />
             </div>
             <div className="text-right" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'flex-end' }}>
-              <div className="font-bold" style={{ fontSize: 15, marginBottom: 8 }}><input className="border-b border-dashed border-gray-400 focus:border-orange-500 outline-none w-64 ml-6" value={invoice.signatory} onChange={e => updateField('signatory', e.target.value)} /></div>
+              <div className="font-bold" style={{ fontSize: 15, marginBottom: 8 }}>For FIRST FILM STUDIOS LLP</div>
               <div style={{ marginBottom: 8 }}>
                 <img src="/inovice_formatting/sign.png" alt="Signature" style={{ width: '120px', height: '60px', objectFit: 'contain' }} />
               </div>

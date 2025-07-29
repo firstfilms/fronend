@@ -218,17 +218,10 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
     hiddenDiv.style.background = '#fff';
     document.body.appendChild(hiddenDiv);
 
-    // Create data with the exact same invoice number that was calculated for preview
-    const pdfData = {
-      ...data,
-      invoiceNo: invoiceNo, // Use the exact same invoice number from preview
-      invoiceId: invoiceNo  // Ensure invoiceId is also set to the same value
-    };
-
-    // Render InvoicePreview into hiddenDiv
+    // Render InvoicePreview into hiddenDiv with the exact same invoice number
     const reactRoot = createRoot(hiddenDiv);
     reactRoot.render(
-      <InvoicePreview data={pdfData} showDownloadButton={false} isPdfExport={true} />
+      <InvoicePreview data={{ ...data, invoiceNo: invoiceNo }} showDownloadButton={false} isPdfExport={true} />
     );
 
     // Wait for render and images to load
@@ -247,7 +240,7 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
     const x = (pageWidth - pdfWidth) / 2;
     const y = 40;
     pdf.addImage(imgData, "PNG", x, y, pdfWidth, pdfHeight);
-    pdf.save(`Invoice_${invoiceNo}.pdf`); // Use the exact same invoice number
+    pdf.save(`Invoice_${invoiceNo}.pdf`);
 
     // Clean up
     reactRoot.unmount();
@@ -257,13 +250,22 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
   // Use table from Excel data
   const tableRows = Array.isArray(table) ? table : [];
 
-  // Use TOTAL columns if provided, else calculate from table
-  const totalShowVal = safeNumber(totalShow) || tableRows.reduce((sum, row) => sum + safeNumber(row.show), 0);
-  const totalAudVal = safeNumber(totalAud) || tableRows.reduce((sum, row) => sum + safeNumber(row.aud), 0);
-  const totalCollectionVal = safeNumber(totalCollection) || tableRows.reduce((sum, row) => sum + safeNumber(row.collection), 0);
+  // Calculate totals from table rows - ALWAYS calculate from actual data
+  const calculatedTotalShow = tableRows.reduce((sum, row) => sum + safeNumber(row.show), 0);
+  const calculatedTotalAud = tableRows.reduce((sum, row) => sum + safeNumber(row.aud), 0);
+  const calculatedTotalCollection = tableRows.reduce((sum, row) => sum + safeNumber(row.collection), 0);
+  
+  // Use calculated totals (more accurate) or fallback to provided totals
+  const totalShowVal = calculatedTotalShow || safeNumber(totalShow) || 0;
+  const totalAudVal = calculatedTotalAud || safeNumber(totalAud) || 0;
+  const totalCollectionVal = calculatedTotalCollection || safeNumber(totalCollection) || 0;
+  
+  // Calculate deductions
   const showTaxVal = safeNumber(showTax) || 0;
   const otherDeductionVal = safeNumber(otherDeduction) || 0;
   const totalDeduction = showTaxVal + otherDeductionVal;
+  
+  // Calculate net collection accurately
   const netCollection = totalCollectionVal - totalDeduction;
 
   // Distribution percent (from user input, default 45)
@@ -574,7 +576,7 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
                 <img src="/inovice_formatting/Stamp_mum.png" alt="Stamp" style={{ width: '120px', height: '120px', objectFit: 'contain' }} />
               </div>
               <div className="text-right" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'flex-end' }}>
-                <div className="font-bold" style={{ fontSize: 15, marginBottom: 8 }}>{signatory}</div>
+                <div className="font-bold" style={{ fontSize: 15, marginBottom: 8 }}>For FIRST FILM STUDIOS LLP</div>
                 <div style={{ marginBottom: 8 }}>
                   <img src="/inovice_formatting/sign.png" alt="Signature" style={{ width: '120px', height: '60px', objectFit: 'contain' }} />
                 </div>

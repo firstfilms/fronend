@@ -17,14 +17,18 @@ export default function CreateInvoicePage() {
   const [previewSource, setPreviewSource] = useState<'frontend' | 'backend'>('frontend'); // NEW
   const [selectedInvoices, setSelectedInvoices] = useState<number[]>([]);
   const [selectAll, setSelectAll] = useState(false);
-  const [isDataUploaded, setIsDataUploaded] = useState(false); // Track if data has been uploaded
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false); // Show confirmation dialog
+  const [showWarningDialog, setShowWarningDialog] = useState(false);
+  const [hasUploaded, setHasUploaded] = useState(false);
+  const [duplicateInvoices, setDuplicateInvoices] = useState<any[]>([]);
 
   // Handler to receive invoices and share/gst from InvoiceForm
   const handleFormChange = (data: any[]) => {
     setInvoices(data || []);
     setSelectedIdx(0);
     setShowPreview(false); // Reset preview on new upload
+    setHasUploaded(false); // Reset upload state for new data
+    setBackendInvoices([]); // Clear backend invoices
+    setDuplicateInvoices([]); // Clear duplicate invoices
     if (data && data.length) {
       setShare(data[0].share ?? 45);
       setGstType(data[0].gstType ?? 'CGST/SGST');
@@ -32,10 +36,76 @@ export default function CreateInvoicePage() {
     }
     setSelectedInvoices([]);
     setSelectAll(false);
-    setIsDataUploaded(false); // Reset upload status when new data is loaded
   };
 
   // New: Upload Excel and invoice data to backend
+  // Check for duplicate invoices in backend
+  const checkForDuplicates = async (invoicesToCheck: any[]) => {
+    try {
+      const fetchRes = await fetch('https://backend-invoice-gen.onrender.com/api/invoices');
+      if (fetchRes.ok) {
+        const backendInvoices = await fetchRes.json();
+        
+        const duplicates = [];
+        
+        for (const newInvoice of invoicesToCheck) {
+          for (const existingInvoice of backendInvoices) {
+            // Compare EVERY SINGLE FIELD - only warn if ALL fields are exactly identical
+            const isDuplicate = 
+              // Basic invoice info
+              newInvoice.clientName === existingInvoice.data?.clientName &&
+              newInvoice.invoiceDate === existingInvoice.data?.invoiceDate &&
+              newInvoice.dueDate === existingInvoice.data?.dueDate &&
+              newInvoice.invoiceNo === existingInvoice.data?.invoiceNo &&
+              
+              // Financial details
+              newInvoice.totalAmount === existingInvoice.data?.totalAmount &&
+              newInvoice.subTotal === existingInvoice.data?.subTotal &&
+              newInvoice.gstAmount === existingInvoice.data?.gstAmount &&
+              newInvoice.finalAmount === existingInvoice.data?.finalAmount &&
+              
+              // Share and GST
+              newInvoice.share === existingInvoice.data?.share &&
+              newInvoice.gstType === existingInvoice.data?.gstType &&
+              newInvoice.gstRate === existingInvoice.data?.gstRate &&
+              
+              // Client details
+              newInvoice.clientEmail === existingInvoice.data?.clientEmail &&
+              newInvoice.clientPhone === existingInvoice.data?.clientPhone &&
+              newInvoice.clientAddress === existingInvoice.data?.clientAddress &&
+              
+              // Other details
+              newInvoice.paymentTerms === existingInvoice.data?.paymentTerms &&
+              newInvoice.notes === existingInvoice.data?.notes &&
+              
+              // Table data - exact match including all table fields
+              newInvoice.table?.length === existingInvoice.data?.table?.length &&
+              JSON.stringify(newInvoice.table) === JSON.stringify(existingInvoice.data?.table) &&
+              
+              // Calculated totals - these must also match exactly
+              newInvoice.totalShow === existingInvoice.data?.totalShow &&
+              newInvoice.totalAud === existingInvoice.data?.totalAud &&
+              newInvoice.totalCollection === existingInvoice.data?.totalCollection &&
+              newInvoice.showTax === existingInvoice.data?.showTax &&
+              newInvoice.otherDeduction === existingInvoice.data?.otherDeduction;
+            
+            if (isDuplicate) {
+              duplicates.push({
+                new: newInvoice,
+                existing: existingInvoice
+              });
+            }
+          }
+        }
+        
+        return duplicates;
+      }
+    } catch (err) {
+      console.error('Error checking for duplicates:', err);
+    }
+    return [];
+  };
+
   const uploadToBackend = async () => {
     if (!invoices.length) return;
     try {
@@ -72,7 +142,7 @@ export default function CreateInvoicePage() {
         })));
         setSelectedIdx(0);
         setShowPreview(true);
-        setIsDataUploaded(true); // Mark data as uploaded
+        setHasUploaded(true); // Mark as uploaded
       }
     } catch (err) {
       console.error('Upload error:', err);
@@ -80,23 +150,53 @@ export default function CreateInvoicePage() {
   };
 
   const handlePreviewClick = async () => {
+    // Check if data has already been uploaded
+    if (hasUploaded) {
+      setShowWarningDialog(true);
+      return;
+    }
+    
+    // Check for duplicate invoices in backend
+    const duplicates = await checkForDuplicates(invoices);
+    if (duplicates.length > 0) {
+      setDuplicateInvoices(duplicates);
+      setShowWarningDialog(true);
+      return;
+    }
+    
     // Show preview immediately with frontend data
     setShowPreview(true);
     setPreviewSource('frontend');
-    
-    // Check if data has already been uploaded
-    if (isDataUploaded) {
-      setShowConfirmDialog(true);
-      return;
-    }
     
     // Then upload to backend and update
     await uploadToBackend();
     setPreviewSource('backend');
   };
 
+  // Handle warning dialog confirmation
+  const handleWarningConfirm = async () => {
+    setShowWarningDialog(false);
+    
+    // Show preview immediately with frontend data
+    setShowPreview(true);
+    setPreviewSource('frontend');
+    
+    // Then upload to backend and update
+    await uploadToBackend();
+    setPreviewSource('backend');
+  };
+
+  // Handle warning dialog cancel
+  const handleWarningCancel = () => {
+    setShowWarningDialog(false);
+    setDuplicateInvoices([]);
+  };
+
   // Download a single invoice as PDF
   const handleDownloadInvoice = async (inv: any, idx: number) => {
+    // Get the exact invoice number that will be used in preview
+    const exactInvoiceNo = inv.invoiceId || inv.invoiceNo || inv["Invoice No"] || `INV${idx + 1}`;
+    
     let hiddenDiv = document.createElement('div');
     hiddenDiv.style.position = 'fixed';
     hiddenDiv.style.left = '-9999px';
@@ -106,7 +206,7 @@ export default function CreateInvoicePage() {
     document.body.appendChild(hiddenDiv);
     const reactRoot = createRoot(hiddenDiv);
     reactRoot.render(
-      <InvoicePreview data={{ ...inv, share, gstType, gstRate }} showDownloadButton={false} isPdfExport={true} />
+      <InvoicePreview data={{ ...inv, share, gstType, gstRate, invoiceNo: exactInvoiceNo }} showDownloadButton={false} isPdfExport={true} />
     );
     await new Promise(r => setTimeout(r, 400));
     const images = Array.from(hiddenDiv.querySelectorAll('img'));
@@ -125,8 +225,6 @@ export default function CreateInvoicePage() {
     const x = (pageWidth - pdfWidth) / 2;
     const y = 40;
     pdf.addImage(imgData, "PNG", x, y, pdfWidth, pdfHeight);
-    // Get the exact invoice number that will be displayed
-    const exactInvoiceNo = inv.invoiceId || inv.invoiceNo || inv["Invoice No"] || `INV${idx + 1}`;
     pdf.save(`Invoice_${exactInvoiceNo}.pdf`);
     reactRoot.unmount();
     document.body.removeChild(hiddenDiv);
@@ -134,8 +232,9 @@ export default function CreateInvoicePage() {
 
   // Download all selected invoices
   const handleDownloadAll = async () => {
+    const currentInvoices = previewSource === 'backend' ? backendInvoices : invoices;
     for (const idx of selectedInvoices) {
-      await handleDownloadInvoice(invoices[idx], idx);
+      await handleDownloadInvoice(currentInvoices[idx], idx);
     }
   };
 
@@ -157,18 +256,6 @@ export default function CreateInvoicePage() {
       setSelectedInvoices(prev => prev.filter(i => i !== idx));
       setSelectAll(false);
     }
-  };
-
-  // Handle duplicate upload confirmation
-  const handleConfirmDuplicateUpload = async () => {
-    setShowConfirmDialog(false);
-    await uploadToBackend();
-    setPreviewSource('backend');
-  };
-
-  // Handle cancel duplicate upload
-  const handleCancelDuplicateUpload = () => {
-    setShowConfirmDialog(false);
   };
 
   return (
@@ -195,10 +282,10 @@ export default function CreateInvoicePage() {
             <span className="text-xs text-gray-500">{selectedInvoices.length} selected</span>
           </div>
           <div className="flex-1 overflow-y-auto">
-            {invoices.length === 0 && (
+            {(previewSource === 'backend' ? backendInvoices : invoices).length === 0 && (
               <div className="p-4 text-xs text-gray-400">No invoices loaded.</div>
             )}
-            {invoices.map((inv, idx) => (
+            {(previewSource === 'backend' ? backendInvoices : invoices).map((inv, idx) => (
               <div
                 key={idx}
                 className={`cursor-pointer px-4 py-3 border-b text-sm transition-all duration-150 rounded-md my-2 mx-2 font-medium shadow-sm ${selectedIdx === idx ? "bg-orange-200 font-bold text-orange-900 ring-2 ring-orange-400" : "hover:bg-orange-50 hover:shadow-md text-gray-800"}`}
@@ -212,7 +299,7 @@ export default function CreateInvoicePage() {
                     onChange={e => { e.stopPropagation(); handleSelectOne(idx, e.target.checked); }}
                     onClick={e => e.stopPropagation()}
                   />
-                  <span>{inv["Invoice No"] || inv["invoiceNo"] || inv["clientName"] || `Invoice #${idx + 1}`}</span>
+                  <span>{inv["Invoice No"] || inv["invoiceNo"] || inv["invoiceId"] || inv["clientName"] || `Invoice #${idx + 1}`}</span>
                 </div>
                 <button
                   className="ml-2 bg-orange-500 hover:bg-orange-700 text-white font-bold px-2 py-1 rounded text-xs shadow"
@@ -245,37 +332,77 @@ export default function CreateInvoicePage() {
         </section>
         {/* Right: InvoiceForm Sidebar */}
         <aside className="w-80 bg-white border-l border-gray-200 flex flex-col items-center p-6">
-          <InvoiceForm 
-            onChange={handleFormChange} 
-            onPreview={handlePreviewClick} 
-            isDataUploaded={isDataUploaded}
-          />
+          <InvoiceForm onChange={handleFormChange} onPreview={handlePreviewClick} />
         </aside>
       </main>
       <footer className="bg-white shadow p-4 text-center text-xs text-gray-500">
         &copy; {new Date().getFullYear()} Invoice Management. All rights reserved.
       </footer>
-
-      {/* Confirmation Dialog */}
-      {showConfirmDialog && (
+      
+      {/* Warning Dialog for Duplicate Upload */}
+      {showWarningDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md mx-4 shadow-xl">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Duplicate Upload Warning</h3>
-            <p className="text-gray-600 mb-6">
-              This data has already been uploaded to the database. Uploading again will create duplicate invoices with new invoice numbers. Do you want to proceed?
-            </p>
-            <div className="flex gap-3 justify-end">
+          <div className="bg-white rounded-lg p-6 max-w-md mx-4">
+            <div className="flex items-center mb-4">
+              <div className="flex-shrink-0">
+                <svg className="h-6 w-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-lg font-semibold text-gray-900">Duplicate Invoice Warning</h3>
+              </div>
+            </div>
+            <div className="mt-2">
+              {hasUploaded ? (
+                <>
+                  <p className="text-sm text-gray-600">
+                    This data has already been uploaded to the database. Creating duplicate invoices will:
+                  </p>
+                  <ul className="mt-2 text-sm text-gray-600 list-disc list-inside">
+                    <li>Generate new invoice numbers</li>
+                    <li>Create duplicate entries in the database</li>
+                    <li>Increase the invoice counter</li>
+                  </ul>
+                </>
+              ) : duplicateInvoices.length > 0 ? (
+                <>
+                  <p className="text-sm text-gray-600">
+                    Found {duplicateInvoices.length} invoice(s) with <strong>EVERY SINGLE FIELD IDENTICAL</strong> in the database:
+                  </p>
+                  <div className="mt-2 max-h-32 overflow-y-auto">
+                    {duplicateInvoices.map((dup, idx) => (
+                      <div key={idx} className="text-xs text-gray-600 bg-gray-50 p-2 rounded mb-1">
+                        <strong>Client:</strong> {dup.new.clientName} | 
+                        <strong>Date:</strong> {dup.new.invoiceDate} | 
+                        <strong>Amount:</strong> ₹{dup.new.totalAmount} | 
+                        <strong>Share:</strong> {dup.new.share}% | 
+                        <strong>GST:</strong> {dup.new.gstType} @ {dup.new.gstRate}% | 
+                        <strong>Items:</strong> {dup.new.items?.length || 0}
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-sm text-gray-600">
+                    These invoices have <strong>EVERY SINGLE FIELD IDENTICAL</strong> to existing invoices. Creating them will generate new invoice numbers and create exact duplicate entries.
+                  </p>
+                </>
+              ) : null}
+              <p className="mt-3 text-sm font-medium text-gray-900">
+                Do you want to proceed with uploading this data?
+              </p>
+            </div>
+            <div className="mt-6 flex gap-3 justify-end">
               <button
-                onClick={handleCancelDuplicateUpload}
-                className="px-4 py-2 text-gray-600 border border-gray-300 rounded hover:bg-gray-50 transition"
+                onClick={handleWarningCancel}
+                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
-                onClick={handleConfirmDuplicateUpload}
-                className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 transition"
+                onClick={handleWarningConfirm}
+                className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors"
               >
-                Upload Again
+                Proceed & Upload
               </button>
             </div>
           </div>

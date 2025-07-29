@@ -12,10 +12,9 @@ interface InvoiceRow {
 interface InvoiceFormProps {
   onChange?: (invoices: InvoiceRow[]) => void;
   onPreview?: () => void;
-  isDataUploaded?: boolean; // Add prop to show upload status
 }
 
-const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview, isDataUploaded = false }) => {
+const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
   const [share, setShare] = useState<number>(45); // default 45%
   const [gstType, setGstType] = useState<'IGST' | 'CGST/SGST'>('CGST/SGST');
   const [gstRate, setGstRate] = useState<number>(18); // default 18%
@@ -188,21 +187,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview, isDataUp
         <input type="number" min="0" max="100" value={gstRate} onChange={handleGstRateChange} className="w-24 border px-2 py-1 rounded" />
       </div>
       {error && <div className="text-red-500 text-xs">{error}</div>}
-      {isDataUploaded && (
-        <div className="text-orange-600 text-xs bg-orange-50 p-2 rounded border border-orange-200">
-          ⚠️ Data has been uploaded. Clicking again will create duplicates.
-        </div>
-      )}
-      <button 
-        type="submit" 
-        className={`px-4 py-1 rounded w-full ${
-          isDataUploaded 
-            ? 'bg-orange-600 hover:bg-orange-700 text-white' 
-            : 'bg-blue-600 hover:bg-blue-700 text-white'
-        }`}
-      >
-        {isDataUploaded ? 'Preview & Upload Again' : 'Preview Invoices'}
-      </button>
+      <button type="submit" className="bg-blue-600 text-white px-4 py-1 rounded w-full">Preview Invoices</button>
     </form>
   );
 };
