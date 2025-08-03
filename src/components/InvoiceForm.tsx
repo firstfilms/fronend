@@ -86,7 +86,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
           centre: row["CENTRE"] || "",
           placeOfService: row["PLACE OF SERVICE"] || "",
           businessTerritory: row["CIRCUIT"] || "",
-          invoiceNo: row["Invoice No"] || row["INVOICE NO"] || "INV_01",
+          invoiceNo: row["Invoice No"] || row["INVOICE NO"] || "-",
           invoiceDate: row["Invoice Date"] || row["INVOICE DATE"] || todayStr,
           // Manual input fields - these will be overridden by user input
           movieName: movieName || row["Movie Name"] || row["MOVIE NAME"] || "",

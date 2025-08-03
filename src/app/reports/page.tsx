@@ -8,6 +8,7 @@ const ReportsPage = () => {
   const [loading, setLoading] = useState(true);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [selectedMovie, setSelectedMovie] = useState('');
   const [showDateSelector, setShowDateSelector] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
 
@@ -131,28 +132,51 @@ const ReportsPage = () => {
     return date && !isNaN(date.getTime()) ? date : null;
   };
 
-  // Filter invoices by date range
+  // Get unique movies for dropdown
+  const uniqueMovies = Array.from(new Set(
+    invoices
+      .map(inv => inv.data?.movieName || '')
+      .filter(movie => movie && movie.trim() !== '')
+  )).sort();
+
+  // Filter invoices by date range and/or movie name
   const filteredInvoices = invoices.filter(inv => {
-    if (!startDate || !endDate) return false;
+    // Date filter (optional)
+    let dateMatch = true;
+    if (startDate && endDate) {
+      const invoiceDate = parseDate(inv.data?.invoiceDate || inv.createdAt);
+      if (!invoiceDate) return false;
+      
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      
+      dateMatch = invoiceDate >= start && invoiceDate <= end;
+    }
     
-    const invoiceDate = parseDate(inv.data?.invoiceDate || inv.createdAt);
-    if (!invoiceDate) return false;
+    // Movie filter (optional)
+    const movieMatch = !selectedMovie || inv.data?.movieName === selectedMovie;
     
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    
-    return invoiceDate >= start && invoiceDate <= end;
+    return dateMatch && movieMatch;
   });
 
   // Generate Excel report
   const generateExcelReport = () => {
-    if (!startDate || !endDate) {
-      alert('Please select both start and end dates');
+    // Check if at least one filter is applied
+    if (!startDate && !endDate && !selectedMovie) {
+      alert('Please select at least one filter (date range or movie name)');
       return;
     }
 
     if (filteredInvoices.length === 0) {
-      alert('No invoices found for the selected date range');
+      let message = 'No invoices found';
+      if (startDate && endDate && selectedMovie) {
+        message = `No invoices found for the selected date range and movie "${selectedMovie}"`;
+      } else if (startDate && endDate) {
+        message = 'No invoices found for the selected date range';
+      } else if (selectedMovie) {
+        message = `No invoices found for movie "${selectedMovie}"`;
+      }
+      alert(message);
       return;
     }
 
@@ -264,10 +288,25 @@ const ReportsPage = () => {
       // Add worksheet to workbook
       XLSX.utils.book_append_sheet(wb, ws, 'Invoice Report');
 
-      // Generate filename with date range
-      const startDateStr = new Date(startDate).toLocaleDateString('en-GB').replace(/\//g, '-');
-      const endDateStr = new Date(endDate).toLocaleDateString('en-GB').replace(/\//g, '-');
-      const filename = `Invoice_Report_${startDateStr}_to_${endDateStr}.xlsx`;
+             // Generate filename with date range and/or movie name
+       let filename = 'Invoice_Report';
+       
+       if (startDate && endDate) {
+         const startDateStr = new Date(startDate).toLocaleDateString('en-GB').replace(/\//g, '-');
+         const endDateStr = new Date(endDate).toLocaleDateString('en-GB').replace(/\//g, '-');
+         filename += `_${startDateStr}_to_${endDateStr}`;
+       }
+       
+       if (selectedMovie) {
+         const movieStr = selectedMovie.replace(/[^a-zA-Z0-9]/g, '_');
+         filename += `_${movieStr}`;
+       }
+       
+       if (!startDate && !endDate && selectedMovie) {
+         filename = `Invoice_Report_${selectedMovie.replace(/[^a-zA-Z0-9]/g, '_')}_AllDates`;
+       }
+       
+       filename += '.xlsx';
 
       // Download the file
       XLSX.writeFile(wb, filename);
@@ -312,45 +351,63 @@ const ReportsPage = () => {
           </div>
           <p className="text-gray-500 text-lg">View comprehensive reports and insights about your invoices.</p>
           
-          {/* Date Range Selector */}
+          {/* Date Range and Movie Selector */}
           <div className="mt-6 bg-white rounded-xl shadow-lg p-6 border border-orange-100">
             <h2 className="text-xl font-bold text-gray-900 mb-4">Generate Excel Report</h2>
-                         <div className="flex items-center gap-4 mb-4">
-               <div>
-                 <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-                 <input
-                   type="date"
-                   value={startDate}
-                   onChange={(e) => setStartDate(e.target.value)}
-                   className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white text-gray-900 font-medium"
-                   style={{ colorScheme: 'light' }}
-                 />
-               </div>
-               <div>
-                 <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-                 <input
-                   type="date"
-                   value={endDate}
-                   onChange={(e) => setEndDate(e.target.value)}
-                   className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white text-gray-900 font-medium"
-                   style={{ colorScheme: 'light' }}
-                 />
-               </div>
-              <div className="flex items-end">
-                <button
-                  onClick={generateExcelReport}
-                  disabled={!startDate || !endDate || generatingReport}
-                  className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 text-white font-bold px-6 py-2 rounded-md transition shadow-lg border border-orange-200 text-lg disabled:cursor-not-allowed"
+            <div className="flex items-center gap-4 mb-4 flex-wrap">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white text-gray-900 font-medium"
+                  style={{ colorScheme: 'light' }}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white text-gray-900 font-medium"
+                  style={{ colorScheme: 'light' }}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Movie Name (Optional)</label>
+                <select
+                  value={selectedMovie}
+                  onChange={(e) => setSelectedMovie(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white text-gray-900 font-medium min-w-[200px]"
                 >
-                  {generatingReport ? 'Generating...' : 'Generate Report'}
-                </button>
+                  <option value="">All Movies</option>
+                  {uniqueMovies.map((movie) => (
+                    <option key={movie} value={movie}>
+                      {movie}
+                    </option>
+                  ))}
+                </select>
               </div>
+                             <div className="flex items-end">
+                 <button
+                   onClick={generateExcelReport}
+                   disabled={(!startDate && !endDate && !selectedMovie) || generatingReport}
+                   className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 text-white font-bold px-6 py-2 rounded-md transition shadow-lg border border-orange-200 text-lg disabled:cursor-not-allowed"
+                 >
+                   {generatingReport ? 'Generating...' : 'Generate Report'}
+                 </button>
+               </div>
             </div>
-            {startDate && endDate && (
-              <div className="text-sm text-gray-600">
-                Found {filteredInvoices.length} invoices between {new Date(startDate).toLocaleDateString()} and {new Date(endDate).toLocaleDateString()}
-              </div>
-            )}
+                         {(startDate || endDate || selectedMovie) && (
+               <div className="text-sm text-gray-600">
+                 Found {filteredInvoices.length} invoices
+                 {startDate && endDate && ` between ${new Date(startDate).toLocaleDateString()} and ${new Date(endDate).toLocaleDateString()}`}
+                 {selectedMovie && ` for movie "${selectedMovie}"`}
+                 {!startDate && !endDate && selectedMovie && ` (all dates)`}
+               </div>
+             )}
           </div>
         </div>
 

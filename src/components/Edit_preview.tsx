@@ -201,7 +201,61 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
     if (typeof val === 'string') return parseFloat(val.replace(/,/g, '')) || 0;
     return 0;
   };
-  const tableRows = Array.isArray(invoice.table) ? invoice.table : [];
+
+  // Generate 7 days of dates from screening start to end date
+  const generateDateRange = (startDate: string, endDate: string) => {
+    if (!startDate || !endDate) return [];
+    
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const dates = [];
+    
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const day = d.getDate().toString().padStart(2, '0');
+      const month = (d.getMonth() + 1).toString().padStart(2, '0');
+      const year = d.getFullYear();
+      dates.push(`${day}-${month}-${year}`);
+    }
+    
+    return dates;
+  };
+
+  // Generate table rows with proper date format
+  const generateTableRows = (originalRows: Array<{date: string; show: number; aud: number; collection: number; deduction: string; deductionAmt: number}>): Array<{date: string; show: number; aud: number; collection: number; deduction: string; deductionAmt: number}> => {
+    const dateRange = generateDateRange(invoice.screeningFrom, invoice.screeningTo);
+    
+    if (dateRange.length === 0) {
+      return originalRows;
+    }
+    
+    // Create a map of existing data by date for quick lookup
+    const existingDataMap = new Map();
+    originalRows.forEach(row => {
+      if (row.date) {
+        // Normalize date format for comparison
+        const normalizedDate = row.date.replace(/\//g, '-');
+        existingDataMap.set(normalizedDate, row);
+      }
+    });
+    
+    // Create new table rows with ALL dates between screening dates
+    return dateRange.map((date) => {
+      // Check if we have existing data for this date
+      const existingRow = existingDataMap.get(date);
+      
+      return {
+        date: date,
+        show: existingRow?.show || 0,
+        aud: existingRow?.aud || 0,
+        collection: existingRow?.collection || 0,
+        deduction: existingRow?.deduction || '',
+        deductionAmt: existingRow?.deductionAmt || 0
+      };
+    });
+  };
+
+  const originalTableRows = Array.isArray(invoice.table) ? invoice.table : [];
+  const tableRows = generateTableRows(originalTableRows);
   
   // Calculate totals from table rows - ALWAYS calculate from actual data
   const calculatedTotalShow = tableRows.reduce((sum, row) => sum + safeNumber(row.show), 0);
@@ -253,50 +307,242 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
 
   // PDF Export
   const handleDownloadPDF = async () => {
-    // Get the exact invoice number that is displayed in the preview
-    const exactInvoiceNo = invoice.invoiceNo || invoice.invoiceId || 'NV060';
-    
-    // Create a hidden div for InvoicePreview
-    let hiddenDiv = document.createElement('div');
-    hiddenDiv.style.position = 'fixed';
-    hiddenDiv.style.left = '-9999px';
-    hiddenDiv.style.top = '0';
-    hiddenDiv.style.width = '800px';
-    hiddenDiv.style.background = '#fff';
-    document.body.appendChild(hiddenDiv);
-    // Render InvoicePreview into hiddenDiv with exact invoice number
-    const reactRoot = createRoot(hiddenDiv);
-    reactRoot.render(
-      <InvoicePreview
-        data={{
-          ...invoice,
-          invoiceNo: exactInvoiceNo, // Ensure exact invoice number is used
-          distributionPercent: String(invoice.distributionPercent ?? ''),
-          cgstRate: String(invoice.cgstRate ?? ''),
-          sgstRate: String(invoice.sgstRate ?? ''),
-          gstRate: String(invoice.gstRate ?? ''),
-          taxType: invoice.taxType === 'GST' || invoice.taxType === 'IGST' ? invoice.taxType : undefined,
-        }}
-        showDownloadButton={false}
-      />
-    );
-    // Wait for render
-    await new Promise(r => setTimeout(r, 200));
-    // Use html2canvas on hiddenDiv
-    const canvas = await html2canvas(hiddenDiv, { scale: 2 });
-    const imgData = canvas.toDataURL("image/png");
-    const pdf = new jsPDF({ orientation: "p", unit: "pt", format: "a4" });
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const imgProps = pdf.getImageProperties(imgData);
-    const pdfWidth = Math.min(800, pageWidth - 80);
-    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-    const x = (pageWidth - pdfWidth) / 2;
-    const y = 40;
-    pdf.addImage(imgData, "PNG", x, y, pdfWidth, pdfHeight);
-    pdf.save(`Invoice_${exactInvoiceNo}.pdf`);
-    // Clean up
-    reactRoot.unmount();
-    document.body.removeChild(hiddenDiv);
+    try {
+      // Get the exact invoice number that is displayed in the preview
+      const exactInvoiceNo = (invoice as any)["Invoice No"] || '-';
+      
+      // Create a hidden div for InvoicePreview
+      let hiddenDiv = document.createElement('div');
+      hiddenDiv.style.position = 'fixed';
+      hiddenDiv.style.left = '-9999px';
+      hiddenDiv.style.top = '0';
+      hiddenDiv.style.width = '800px';
+      hiddenDiv.style.background = '#fff';
+      // Remove any problematic CSS that might cause oklch errors
+      hiddenDiv.style.color = '#000';
+      hiddenDiv.style.fontFamily = 'Arial, Helvetica, sans-serif';
+      
+              // Add a style tag to override any oklch colors and preserve stamp size
+        const styleTag = document.createElement('style');
+        styleTag.textContent = `
+          * {
+            color: #000 !important;
+            background-color: #fff !important;
+            border-color: #000 !important;
+          }
+          .bg-orange-600 { background-color: #ea580c !important; }
+          .bg-blue-600 { background-color: #2563eb !important; }
+          .text-white { color: #fff !important; }
+          .text-black { color: #000 !important; }
+          .border-black { border-color: #000 !important; }
+          
+          /* Preserve stamp size in PDF - prevent any distortion */
+          img[src*="Stamp_mum.png"] {
+            width: 144px !important; /* 120px + 20% = 144px */
+            height: 120px !important;
+            object-fit: contain !important;
+            min-width: 144px !important;
+            max-width: 144px !important;
+            min-height: 120px !important;
+            max-height: 120px !important;
+            aspect-ratio: 1.2/1 !important; /* 20% wider */
+            transform: none !important;
+            scale: 1 !important;
+            flex-shrink: 0 !important;
+            flex-grow: 0 !important;
+            box-sizing: border-box !important;
+            display: block !important;
+            position: static !important;
+          }
+          
+          /* Prevent any flex container from compressing the stamp */
+          div:has(img[src*="Stamp_mum.png"]) {
+            width: 144px !important; /* 120px + 20% = 144px */
+            height: 120px !important;
+            flex-shrink: 0 !important;
+            flex-grow: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            min-width: 144px !important;
+            max-width: 144px !important;
+            min-height: 120px !important;
+            max-height: 120px !important;
+          }
+          
+          /* Prevent parent containers from affecting stamp */
+          div:has(div:has(img[src*="Stamp_mum.png"])) {
+            flex-shrink: 0 !important;
+            min-width: fit-content !important;
+          }
+          
+          /* Container for stamp to prevent stretching */
+          div:has(img[src*="Stamp_mum.png"]) {
+            width: 120px !important;
+            height: 120px !important;
+            flex-shrink: 0 !important;
+            flex-grow: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+          }
+          
+          /* Fix terms and conditions positioning */
+          .w-full[style*="fontSize: 13"] {
+            position: relative !important;
+            margin-top: 16px !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            position: static !important;
+            transform: none !important;
+          }
+          
+          /* Ensure terms content stays in position */
+          .p-2[style*="position: relative"] {
+            position: relative !important;
+            margin: 0 !important;
+            padding: 8px 16px !important;
+            position: static !important;
+            transform: none !important;
+          }
+          
+
+        `;
+      hiddenDiv.appendChild(styleTag);
+      document.body.appendChild(hiddenDiv);
+      
+      // Render InvoicePreview into hiddenDiv with exact invoice number
+      const reactRoot = createRoot(hiddenDiv);
+      reactRoot.render(
+        <InvoicePreview
+          data={{
+            ...invoice,
+            invoiceNo: exactInvoiceNo, // Ensure exact invoice number is used
+            distributionPercent: String(invoice.distributionPercent ?? ''),
+            cgstRate: String(invoice.cgstRate ?? ''),
+            sgstRate: String(invoice.sgstRate ?? ''),
+            gstRate: String(invoice.gstRate ?? ''),
+            taxType: invoice.taxType === 'GST' || invoice.taxType === 'IGST' ? invoice.taxType : undefined,
+          }}
+          showDownloadButton={false}
+        />
+      );
+      
+      // Wait for render
+      await new Promise(r => setTimeout(r, 600));
+      
+      // Remove any problematic CSS classes that might contain oklch
+      const allElements = hiddenDiv.querySelectorAll('*');
+      allElements.forEach(element => {
+        if (element instanceof HTMLElement) {
+          // Remove any classes that might contain problematic CSS
+          const classesToRemove = Array.from(element.classList).filter(cls => 
+            cls.includes('bg-') || cls.includes('text-') || cls.includes('border-')
+          );
+          classesToRemove.forEach(cls => element.classList.remove(cls));
+        }
+      });
+      
+      // Ensure stamp maintains exact size and aspect ratio
+      const stampElements = hiddenDiv.querySelectorAll('img[src*="Stamp_mum.png"]');
+      stampElements.forEach((stamp: Element) => {
+        if (stamp instanceof HTMLElement) {
+          stamp.style.width = '144px'; /* 120px + 20% = 144px */
+          stamp.style.height = '120px';
+          stamp.style.objectFit = 'contain';
+          stamp.style.minWidth = '144px';
+          stamp.style.maxWidth = '144px';
+          stamp.style.minHeight = '120px';
+          stamp.style.maxHeight = '120px';
+          stamp.style.aspectRatio = '1.2/1'; /* 20% wider */
+          stamp.style.transform = 'none';
+          stamp.style.scale = '1';
+          stamp.style.flexShrink = '0';
+          stamp.style.flexGrow = '0';
+          stamp.style.boxSizing = 'border-box';
+          
+          // Also set the container properties
+          const container = stamp.parentElement;
+          if (container) {
+            container.style.width = '144px'; /* 120px + 20% = 144px */
+            container.style.height = '120px';
+            container.style.flexShrink = '0';
+            container.style.flexGrow = '0';
+            container.style.display = 'flex';
+            container.style.alignItems = 'center';
+            container.style.justifyContent = 'center';
+            container.style.minWidth = '144px';
+            container.style.maxWidth = '144px';
+            container.style.minHeight = '120px';
+            container.style.maxHeight = '120px';
+          }
+          
+          // Also set parent container properties to prevent compression
+          const parentContainer = container?.parentElement;
+          if (parentContainer) {
+            parentContainer.style.flexShrink = '0';
+            parentContainer.style.minWidth = 'fit-content';
+          }
+        }
+      });
+      
+      // Use html2canvas with optimized settings for minimum file size
+      const canvas = await html2canvas(hiddenDiv, { 
+        scale: 1.5, // Reduced from 2 to 1.5 for smaller file size
+        backgroundColor: '#fff',
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        removeContainer: true,
+        imageTimeout: 5000, // Reduced timeout
+        onclone: (clonedDoc) => {
+          // Ensure stamp maintains exact dimensions in cloned document
+          const clonedStamp = clonedDoc.querySelector('img[src*="Stamp_mum.png"]');
+          if (clonedStamp instanceof HTMLElement) {
+            clonedStamp.style.width = '144px'; /* 120px + 20% = 144px */
+            clonedStamp.style.height = '120px';
+            clonedStamp.style.objectFit = 'contain';
+            clonedStamp.style.aspectRatio = '1.2/1'; /* 20% wider */
+            clonedStamp.style.transform = 'none';
+            clonedStamp.style.scale = '1';
+            clonedStamp.style.flexShrink = '0';
+            clonedStamp.style.flexGrow = '0';
+          }
+        },
+        ignoreElements: (element) => {
+          // Ignore elements with problematic CSS
+          const style = window.getComputedStyle(element);
+          return style.color.includes('oklch') || 
+                 style.backgroundColor.includes('oklch') ||
+                 style.borderColor.includes('oklch');
+        }
+      });
+      
+      // Optimize image data for minimum size
+      const imgData = canvas.toDataURL("image/jpeg", 0.8); // Use JPEG with 80% quality instead of PNG
+      const pdf = new jsPDF({ 
+        orientation: "p", 
+        unit: "pt", 
+        format: "a4",
+        compress: true // Enable PDF compression
+      });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = Math.min(700, pageWidth - 60); // Slightly smaller width
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      const x = (pageWidth - pdfWidth) / 2;
+      const y = 30; // Reduced top margin
+      pdf.addImage(imgData, "JPEG", x, y, pdfWidth, pdfHeight, undefined, 'FAST'); // Use FAST compression
+      const filename = exactInvoiceNo === '-' ? `Invoice_${Date.now()}.pdf` : `Invoice_${exactInvoiceNo}.pdf`;
+      pdf.save(filename);
+      
+      // Clean up
+      reactRoot.unmount();
+      document.body.removeChild(hiddenDiv);
+    } catch (error) {
+      console.error('PDF generation error:', error);
+      alert('Error generating PDF. Please try again.');
+    }
   };
 
   return (
@@ -316,11 +562,11 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
         style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000', background: '#fff', width: '800px', minHeight: '1100px', boxSizing: 'border-box', position: 'relative', overflowY: 'auto', overflowX: 'hidden', marginTop: 32, marginBottom: 32 }}
       >
         {/* Header */}
-        <div className="flex flex-row items-stretch" style={{ background: '#e46d04', borderBottom: '2px solid #000', minHeight: 130, height: 130 }}>
+        <div className="flex flex-row items-stretch" style={{ background: '#fff', minHeight: 130, height: 130 }}>
           <div style={{ width: 220, height: '100%', display: 'flex', alignItems: 'stretch', justifyContent: 'flex-start', background: 'transparent', padding: 0, margin: 0 }}>
-            <img src="/inovice_formatting/logo_wbg.png" alt="Logo" style={{ height: '100%', width: '100%', objectFit: 'contain', margin: 0, padding: 0 }} />
+            <img src="/inovice_formatting/1stfflogo.jpg" alt="Logo" style={{ height: '100%', width: '100%', objectFit: 'contain', margin: 0, padding: 0 }} />
           </div>
-          <div className="flex-1 flex flex-col items-end justify-center pr-8" style={{ color: '#fff', textAlign: 'right', fontFamily: 'Arial, Helvetica, sans-serif', height: '100%', paddingTop: 8, paddingBottom: 8, justifyContent: 'center' }}>
+          <div className="flex-1 flex flex-col items-end justify-center pr-8" style={{ color: '#000', textAlign: 'right', fontFamily: 'Arial, Helvetica, sans-serif', height: '100%', paddingTop: 8, paddingBottom: 8, justifyContent: 'center' }}>
             <div className="font-bold" style={{ fontSize: 20, letterSpacing: 1, lineHeight: 1.1 }}>FIRST FILM STUDIOS LLP</div>
             <div style={{ fontSize: 13, lineHeight: 1.1 }}>26-104, RIDDHI SIDHI, CHS, CSR COMPLEX, OLD MHADA,</div>
             <div style={{ fontSize: 13, lineHeight: 1.1 }}>KANDIVALI WEST, MUMBAI - 400067, MAHARASHTRA</div>
@@ -332,11 +578,11 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
         </div>
 
         {/* Main Invoice Box */}
-        <div className="border border-black m-4" style={{ background: '#fff', padding: 0, border: '3px solid #000' }}>
+        <div className="m-4" style={{ background: '#fff', padding: 0 }}>
           {/* Top Details - Two Columns */}
-          <div className="flex flex-row w-full" style={{ borderBottom: '3px solid #000', fontFamily: 'Arial, Helvetica, sans-serif', fontSize: 15, minHeight: 160 }}>
+          <div className="flex flex-row w-full" style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontSize: 15, minHeight: 160 }}>
             {/* Left Column */}
-            <div className="flex-1 p-4" style={{ borderRight: '3px solid #000', paddingTop: 18, paddingBottom: 18, paddingLeft: 8, paddingRight: 8 }}>
+            <div className="flex-1 p-4" style={{ paddingTop: 18, paddingBottom: 18, paddingLeft: 8, paddingRight: 8 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 0 }}>
                 <span style={{ marginRight: 6 }}>M/s</span>
                 <input className="font-bold border-b border-dashed border-gray-400 focus:border-orange-500 outline-none" value={invoice.clientName} onChange={e => updateField('clientName', e.target.value)} />
@@ -380,10 +626,10 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
                 <span style={{ minWidth: 110 }}>Cinema Week</span>
                 <span style={{ fontWeight: 700, marginLeft: 8 }}><input className="border-b border-dashed border-gray-400 focus:border-orange-500 outline-none w-16 ml-2" value={invoice.cinemaWeek} onChange={e => updateField('cinemaWeek', e.target.value)} /></span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
                 <span style={{ minWidth: 110 }}>Screening Date</span>
-                <span style={{ marginLeft: 8, minWidth: 120 }}>From <span style={{ fontWeight: 700 }}><input type="date" className="border-b border-dashed border-gray-400 focus:border-orange-500 outline-none w-32 ml-2" value={invoice.screeningFrom} onChange={e => updateField('screeningFrom', e.target.value)} /></span></span>
-                <span style={{ marginLeft: 8, minWidth: 120 }}>To <span style={{ fontWeight: 700 }}><input type="date" className="border-b border-dashed border-gray-400 focus:border-orange-500 outline-none w-32 ml-2" value={invoice.screeningTo} onChange={e => updateField('screeningTo', e.target.value)} /></span></span>
+                <span style={{ marginLeft: 8 }}>From <span style={{ fontWeight: 700 }}><input type="date" className="border-b border-dashed border-gray-400 focus:border-orange-500 outline-none w-32 ml-2" value={invoice.screeningFrom} onChange={e => updateField('screeningFrom', e.target.value)} /></span></span>
+                <span style={{ marginLeft: 8 }}>To <span style={{ fontWeight: 700 }}><input type="date" className="border-b border-dashed border-gray-400 focus:border-orange-500 outline-none w-32 ml-2" value={invoice.screeningTo} onChange={e => updateField('screeningTo', e.target.value)} /></span></span>
               </div>
             </div>
           </div>
@@ -391,14 +637,14 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
           {/* Data Table Section - two side-by-side tables with thinner borders */}
           <div style={{ display: 'flex', flexDirection: 'row', margin: 0, padding: 0 }}>
             {/* Left Table: Data Table */}
-            <table style={{ width: '50%', borderCollapse: 'collapse', border: '1.5px solid #000', borderLeft: '1.5px solid #fff', borderTop: 'none', borderBottom: 'none', borderRight: 'none', fontFamily: 'Arial, Helvetica, sans-serif', fontSize: 13, margin: 0 }}>
+            <table style={{ width: '55%', borderCollapse: 'collapse', borderTop: '3px solid #000', borderBottom: '3px solid #000', borderLeft: '3px solid #000', borderRight: 'none', fontFamily: 'Arial, Helvetica, sans-serif', fontSize: 13, margin: 0 }}>
               <colgroup>
+                <col style={{ width: '25%' }} />
+                <col style={{ width: '8%' }} />
+                <col style={{ width: '8%' }} />
+                <col style={{ width: '18%' }} />
                 <col style={{ width: '20%' }} />
-                <col style={{ width: '10%' }} />
-                <col style={{ width: '10%' }} />
-                <col style={{ width: '20%' }} />
-                <col style={{ width: '20%' }} />
-                <col style={{ width: '20%' }} />
+                <col style={{ width: '21%' }} />
               </colgroup>
             <thead>
                 <tr>
@@ -452,7 +698,7 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
               </tbody>
             </table>
             {/* Right Table: Particulars/Amount */}
-            <table style={{ width: '50%', borderCollapse: 'collapse', border: '1.5px solid #000', borderLeft: 'none', borderRight: '1.5px solid #fff', borderTop: 'none', borderBottom: 'none', fontFamily: 'Arial, Helvetica, sans-serif', fontSize: 13, margin: 0 }}>
+            <table style={{ width: '45%', borderCollapse: 'collapse', border: '3px solid #000', borderLeft: 'none', fontFamily: 'Arial, Helvetica, sans-serif', fontSize: 13, margin: 0 }}>
               <colgroup>
                 <col style={{ width: '60%' }} />
                 <col style={{ width: '40%' }} />
@@ -502,15 +748,15 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
                   </>
                 )}
                 <tr>
-                  <td style={{ borderLeft: '2px solid #000', borderRight: '1.5px solid #000', borderTop: '1.5px solid #000', borderBottom: '2px solid #000', textAlign: 'center', fontWeight: 700, padding: 0 }}>Net Amount</td>
-                  <td style={{ borderLeft: '1.5px solid #000', borderRight: '2px solid #000', borderTop: '1.5px solid #000', borderBottom: '2px solid #000', textAlign: 'center', fontWeight: 700, padding: 0 }}>{netAmountVal.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                  <td style={{ borderLeft: '2px solid #000', borderRight: '1.5px solid #000', borderTop: '1.5px solid #000', borderBottom: 'none', textAlign: 'center', fontWeight: 700, padding: 0 }}>Net Amount</td>
+                  <td style={{ borderLeft: '1.5px solid #000', borderRight: '2px solid #000', borderTop: '1.5px solid #000', borderBottom: 'none', textAlign: 'center', fontWeight: 700, padding: 0 }}>{netAmountVal.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
                 </tr>
             </tbody>
           </table>
         </div>
 
           {/* HSN/SAC, Description, Tax Summary, Net Amount, Amount in Words Section - perfectly aligned with particulars table, merged with blank space above */}
-          <table style={{ width: '100%', borderCollapse: 'collapse', border: '1.5px solid #000', borderTop: 'none', fontFamily: 'Arial, Helvetica, sans-serif', fontSize: 13, margin: 0 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', border: '3px solid #000', borderTop: 'none', fontFamily: 'Arial, Helvetica, sans-serif', fontSize: 13, margin: 0 }}>
             <colgroup>
               <col style={{ width: '25%' }} />
               <col style={{ width: '25%' }} />
@@ -523,12 +769,12 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
                 <td style={{ border: '1.5px solid #000', borderLeft: 'none', borderRight: 'none', padding: 0 }} rowSpan={2}></td>
               </tr>
               <tr>
-                <td style={{ border: '1.5px solid #000', textAlign: 'left' }}>Description</td>
-                <td style={{ border: '1.5px solid #000', textAlign: 'left', borderRight: '1.5px solid #000' }}><input className="border-b border-dashed border-gray-400 focus:border-orange-500 outline-none w-64 ml-6" value={invoice.description} onChange={e => updateField('description', e.target.value)} /></td>
+                <td style={{ border: '1.5px solid #000', borderBottom: '1.5px solid #000', textAlign: 'left' }}>Description</td>
+                <td style={{ border: '1.5px solid #000', borderBottom: '1.5px solid #000', textAlign: 'left', borderRight: '1.5px solid #000' }}><input className="border-b border-dashed border-gray-400 focus:border-orange-500 outline-none w-64 ml-6" value={invoice.description} onChange={e => updateField('description', e.target.value)} /></td>
               </tr>
               {/* Amount in Words Row - merged, full width */}
               <tr>
-                <td colSpan={3} style={{ border: '1.5px solid #000', borderTop: 'none', textAlign: 'left', fontWeight: 700, padding: '8px 12px', background: '#fff' }}>
+                <td colSpan={3} style={{ border: '3px solid #000', borderTop: 'none', textAlign: 'left', fontWeight: 700, padding: '8px 12px', background: '#fff', marginTop: '1.5px' }}>
                   Amount in Words: {amountInWords}
                 </td>
               </tr>
@@ -536,24 +782,25 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
           </table>
 
           {/* Amount in Words, Remarks, Terms, Bank */}
-          <div className="w-full border-t border-black" style={{ fontSize: 13 }}>
-            <div className="p-2">
+          <div className="w-full" style={{ fontSize: 13, position: 'relative', marginTop: '16px', pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+            <div className="p-2" style={{ position: 'relative', margin: 0, padding: '8px 16px' }}>
               {/* <div><b>Amount in Words:</b> {amountInWords}</div> */}
               <div className="mt-2"><b>Remark:</b> <textarea className="border-b border-dashed border-gray-400 focus:border-orange-500 outline-none w-full" value={invoice.remark} onChange={e => updateField('remark', e.target.value)} /></div>
               <div className="mt-2 font-bold">Terms & Conditions :-</div>
-              <ol className="list-decimal pl-6">
-                <li>Payment is due within 14 days from the date invoice. Interest @18% pa. will be charged for payment delayed beyond that period.</li>
-                <li>All cheques / drafts should be crossed and made payable to <b>FIRST FILM STUDIOS LLP</b></li>
-                <li>Bank Detail: - HDFC BANK LIMITED A/c No.: <b>50200099601176</b>  IFSC CODE: <b>HDFC0000543</b></li>
-                <li>BRANCH: AHURA CENTRE, ANDHERI WEST</li>
-                <li>Subject to Mumbai jurisdiction</li>
-              </ol>
-        </div>
+              <div style={{ margin: 0, padding: 0, lineHeight: '1.4' }}>
+                1. Payment is due within 14 days from the date invoice. Interest @18% pa. will be charged for payment delayed beyond that period.<br /><br />
+                2. All cheques / drafts should be crossed and made payable to<br />
+                <span style={{ fontWeight: 'bold', marginLeft: '20px' }}>FIRST FILM STUDIOS LLP</span><br />
+                <span style={{ marginLeft: '20px' }}>Bank Detail: - HDFC BANK LIMITED A/c No.: <b>50200099601176</b> IFSC CODE: <b>HDFC0000543</b></span><br />
+                <span style={{ marginLeft: '20px' }}>BRANCH: AHURA CENTRE, ANDHERI WEST</span><br /><br />
+                3. Subject to Mumbai jurisdiction
+              </div>
+            </div>
           </div>
 
           {/* Footer: Stamp and Signature */}
-          <div className="flex flex-row items-end justify-end w-full p-4" style={{ minHeight: 100 }}>
-            <div style={{ marginRight: 32 }}>
+          <div className="flex flex-row items-end justify-end w-full p-4" style={{ minHeight: 100, position: 'relative', zIndex: 1 }}>
+            <div style={{ marginRight: 32, position: 'relative' }}>
               <img src="/inovice_formatting/Stamp_mum.png" alt="Stamp" style={{ width: 120, height: 120, objectFit: 'contain' }} />
             </div>
             <div className="text-right" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'flex-end' }}>

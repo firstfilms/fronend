@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import InvoicePreview from './InvoicePreview';
 import EditPreview from './Edit_preview';
@@ -13,6 +13,7 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [showEdit, setShowEdit] = useState(false);
   const [editInvoice, setEditInvoice] = useState<any>(null);
+
 
   // Fetch invoices from backend
   useEffect(() => {
@@ -28,6 +29,8 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
       .then(data => {
         console.log('Fetched invoices:', data);
         setInvoices(data);
+        
+
       })
       .catch((error) => {
         console.error('Error fetching invoices:', error);
@@ -103,10 +106,12 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
     );
   };
 
+
+
   // Filtered data based on search and filter
   const filteredInvoices = invoices.filter(inv => {
     const clientName = inv.data?.clientName || inv.clientName || '';
-    const invoiceNo = inv.data?.invoiceNo || inv.invoiceNo || inv.invoiceId || '';
+            const invoiceNo = (inv.data as any)?.["Invoice No"] || '';
     const centre = inv.data?.centre || '';
     const placeOfService = inv.data?.placeOfService || '';
     const businessTerritory = inv.data?.businessTerritory || '';
@@ -158,10 +163,12 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
   // Get invoice data for InvoicePreview
   const getInvoiceData = (inv: any) => {
     if (!inv) return {};
+    // Memoize the result to avoid unnecessary re-computations
+    const data = inv.data || {};
     return {
-      ...(inv.data || {}),
-      invoiceId: inv.invoiceId, // always include backend id for preview
-      invoiceNo: inv.invoiceNo || inv.invoiceId // Use invoiceNo from backend or fallback to invoiceId
+      ...data,
+      invoiceId: inv.invoiceId,
+      invoiceNo: inv.invoiceNo || inv.invoiceId
     };
   };
 
@@ -213,11 +220,13 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
     };
   }, [showFilter, selectedInvoice]);
 
+
+
   // Add a download handler for PDF
   const handleDownloadPDF = async (inv: any) => {
     // Get the exact invoice data that will be used in preview
     const invoiceData = getInvoiceData(inv);
-    const exactInvoiceNo = invoiceData.invoiceId || invoiceData.invoiceNo || inv.invoiceId;
+            const exactInvoiceNo = (invoiceData as any)?.["Invoice No"] || '-';
     
     // Dynamically import ReactDOM for SSR safety
     const { createRoot } = await import('react-dom/client');
@@ -227,31 +236,203 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
     hiddenDiv.style.top = '0';
     hiddenDiv.style.width = '800px';
     hiddenDiv.style.background = '#fff';
+    // Add CSS overrides for PDF optimization
+    const styleTag = document.createElement('style');
+    styleTag.textContent = `
+      /* Override all colors to safe hex values */
+      * {
+        color: #000 !important;
+        background-color: #fff !important;
+        border-color: #000 !important;
+      }
+      
+      /* Specific Tailwind overrides */
+      .bg-orange-600 { background-color: #fff !important; }
+      .bg-blue-600 { background-color: #fff !important; }
+      .text-white { color: #000 !important; }
+      .text-black { color: #000 !important; }
+      .border-black { border-color: #000 !important; }
+      
+      /* Preserve stamp size in PDF - prevent any distortion */
+      img[src*="Stamp_mum.png"] {
+        width: 144px !important; /* 120px + 20% = 144px */
+        height: 120px !important;
+        object-fit: contain !important;
+        min-width: 144px !important;
+        max-width: 144px !important;
+        min-height: 120px !important;
+        max-height: 120px !important;
+        aspect-ratio: 1.2/1 !important; /* 20% wider */
+        transform: none !important;
+        scale: 1 !important;
+        flex-shrink: 0 !important;
+        flex-grow: 0 !important;
+        box-sizing: border-box !important;
+        display: block !important;
+        position: static !important;
+      }
+      
+      /* Prevent any flex container from compressing the stamp */
+      div:has(img[src*="Stamp_mum.png"]) {
+        width: 144px !important; /* 120px + 20% = 144px */
+        height: 120px !important;
+        flex-shrink: 0 !important;
+        flex-grow: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        min-width: 144px !important;
+        max-width: 144px !important;
+        min-height: 120px !important;
+        max-height: 120px !important;
+      }
+      
+      /* Fix terms and conditions positioning */
+      .w-full[style*="fontSize: 13"] {
+        position: relative !important;
+        margin-top: 16px !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        position: static !important;
+        transform: none !important;
+      }
+      
+      /* Ensure terms content stays in position */
+      .p-2[style*="position: relative"] {
+        position: relative !important;
+        margin: 0 !important;
+        padding: 8px 16px !important;
+        position: static !important;
+        transform: none !important;
+      }
+      
+      /* Prevent any layout shifts in terms section */
+      ol[style*="margin: 0"] {
+        margin: 0 !important;
+        padding: 0 !important;
+        position: static !important;
+      }
+      
+      li[style*="marginBottom: '8px'"] {
+        margin-bottom: 8px !important;
+        line-height: 1.4 !important;
+        position: static !important;
+        top: auto !important;
+        transform: none !important;
+      }
+    `;
+    hiddenDiv.appendChild(styleTag);
     document.body.appendChild(hiddenDiv);
+    
     const reactRoot = createRoot(hiddenDiv);
     reactRoot.render(
       <InvoicePreview data={{ ...invoiceData, invoiceNo: exactInvoiceNo }} showDownloadButton={false} isPdfExport={true} />
     );
-    await new Promise(r => setTimeout(r, 400));
+    
+    // Wait for render and images to load
+    await new Promise(r => setTimeout(r, 600));
     const images = Array.from(hiddenDiv.querySelectorAll('img'));
-    await Promise.all(images.map(img => {
+    await Promise.all(images.map((img: HTMLImageElement) => {
       if (img.complete && img.naturalHeight !== 0) return Promise.resolve();
       return new Promise(res => { img.onload = img.onerror = res; });
     }));
+    
+    // Remove any problematic CSS classes that might contain oklch
+    const allElements = hiddenDiv.querySelectorAll('*');
+    allElements.forEach(element => {
+      if (element instanceof HTMLElement) {
+        // Remove any classes that might contain problematic CSS
+        const classesToRemove = Array.from(element.classList).filter(cls => 
+          cls.includes('bg-') || cls.includes('text-') || cls.includes('border-')
+        );
+        classesToRemove.forEach(cls => element.classList.remove(cls));
+      }
+    });
+    
+    // Ensure stamp maintains exact size and aspect ratio
+    const stampElements = hiddenDiv.querySelectorAll('img[src*="Stamp_mum.png"]');
+    stampElements.forEach((stamp: Element) => {
+      if (stamp instanceof HTMLElement) {
+        stamp.style.width = '144px'; /* 120px + 20% = 144px */
+        stamp.style.height = '120px';
+        stamp.style.objectFit = 'contain';
+        stamp.style.minWidth = '144px';
+        stamp.style.maxWidth = '144px';
+        stamp.style.minHeight = '120px';
+        stamp.style.maxHeight = '120px';
+        stamp.style.aspectRatio = '1.2/1'; /* 20% wider */
+        stamp.style.transform = 'none';
+        stamp.style.scale = '1';
+        stamp.style.flexShrink = '0';
+        stamp.style.flexGrow = '0';
+        stamp.style.boxSizing = 'border-box';
+        
+        // Also set the container properties
+        const container = stamp.parentElement;
+        if (container) {
+          container.style.width = '144px'; /* 120px + 20% = 144px */
+          container.style.height = '120px';
+          container.style.flexShrink = '0';
+          container.style.flexGrow = '0';
+          container.style.display = 'flex';
+          container.style.alignItems = 'center';
+          container.style.justifyContent = 'center';
+          container.style.minWidth = '144px';
+          container.style.maxWidth = '144px';
+          container.style.minHeight = '120px';
+          container.style.maxHeight = '120px';
+        }
+      }
+    });
     const html2canvas = (await import('html2canvas')).default;
     const jsPDF = (await import('jspdf')).default;
-    const canvas = await html2canvas(hiddenDiv, { scale: 2, backgroundColor: '#fff' });
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' });
+    const canvas = await html2canvas(hiddenDiv, { 
+      scale: 1.5, // Reduced from 2 to 1.5 for smaller file size
+      backgroundColor: '#fff',
+      useCORS: true,
+      allowTaint: true,
+      logging: false,
+      removeContainer: true,
+      imageTimeout: 5000,
+      onclone: (clonedDoc) => {
+        // Ensure stamp maintains exact dimensions in cloned document
+        const clonedStamp = clonedDoc.querySelector('img[src*="Stamp_mum.png"]');
+        if (clonedStamp instanceof HTMLElement) {
+          clonedStamp.style.width = '144px'; /* 120px + 20% = 144px */
+          clonedStamp.style.height = '120px';
+          clonedStamp.style.objectFit = 'contain';
+          clonedStamp.style.aspectRatio = '1.2/1'; /* 20% wider */
+          clonedStamp.style.transform = 'none';
+          clonedStamp.style.scale = '1';
+          clonedStamp.style.flexShrink = '0';
+          clonedStamp.style.flexGrow = '0';
+        }
+      },
+      ignoreElements: (element) => {
+        // Ignore elements with problematic CSS
+        const style = window.getComputedStyle(element);
+        return style.color.includes('oklch') || 
+               style.backgroundColor.includes('oklch') ||
+               style.borderColor.includes('oklch');
+      }
+    });
+    const imgData = canvas.toDataURL("image/jpeg", 0.8); // Use JPEG with 80% quality instead of PNG
+    const pdf = new jsPDF({ 
+      orientation: 'p', 
+      unit: 'pt', 
+      format: 'a4',
+      compress: true // Enable PDF compression
+    });
     const pageWidth = pdf.internal.pageSize.getWidth();
     const imgWidth = canvas.width;
     const imgHeight = canvas.height;
-    const pdfWidth = Math.min(800, pageWidth - 80);
+    const pdfWidth = Math.min(700, pageWidth - 60); // Slightly smaller width
     const pdfHeight = (imgHeight * pdfWidth) / imgWidth;
     const x = (pageWidth - pdfWidth) / 2;
-    const y = 40;
-    pdf.addImage(imgData, 'PNG', x, y, pdfWidth, pdfHeight);
-    pdf.save(`Invoice_${exactInvoiceNo}.pdf`);
+    const y = 30; // Reduced top margin
+    pdf.addImage(imgData, "JPEG", x, y, pdfWidth, pdfHeight, undefined, 'FAST'); // Use FAST compression
+    const filename = exactInvoiceNo === '-' ? `Invoice_${Date.now()}.pdf` : `Invoice_${exactInvoiceNo}.pdf`;
+    pdf.save(filename);
     reactRoot.unmount();
     document.body.removeChild(hiddenDiv);
   };
@@ -331,6 +512,8 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
           </div>
         </div>
 
+
+
         {/* Filter Status */}
         {(search || filter !== 'Show All') && (
           <div className="mb-4 flex items-center gap-2 text-sm text-gray-600">
@@ -390,7 +573,7 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
                   return (
                     <tr key={inv._id} className="border-b border-orange-100 hover:bg-orange-50 transition group">
                       <td className="px-2 py-4 text-gray-700 font-semibold">{idx + 1}</td>
-                      <td className="px-2 py-4 text-gray-700 font-semibold">{inv.invoiceId}</td>
+                      <td className="px-2 py-4 text-gray-700 font-semibold">{(inv.data as any)?.["Invoice No"] || '-'}</td>
                       <td
                         className="px-2 py-4 text-gray-700 font-semibold truncate"
                         title={inv.data?.clientName || inv.clientName}
@@ -431,7 +614,10 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
                           <div className="absolute right-0 mt-2 w-48 bg-white border border-orange-200 rounded-lg shadow-lg z-20">
                             <button
                               className="w-full text-left px-4 py-2 text-gray-700 hover:bg-orange-50 flex items-center gap-2"
-                              onClick={() => { setSelectedInvoice(inv); setShowPreview(true); }}
+                              onClick={() => { 
+                                setSelectedInvoice(inv); 
+                                setShowPreview(true); 
+                              }}
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -480,7 +666,7 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
       </div>
 
       {/* Invoice Preview Modal */}
-      {showPreview && (
+      {showPreview && selectedInvoice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-2xl min-w-[1300px] w-[90vw] max-h-[90vh] flex flex-col relative overflow-hidden">
             <button
@@ -491,7 +677,7 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
               &times;
             </button>
             <div className="overflow-y-auto p-6 flex justify-center" style={{ maxHeight: '80vh', overflowX: 'hidden' }}>
-              <InvoicePreview data={getInvoiceData(selectedInvoice)} showDownloadButton={false} />
+              <InvoicePreview data={useMemo(() => getInvoiceData(selectedInvoice), [selectedInvoice])} showDownloadButton={false} />
             </div>
           </div>
         </div>

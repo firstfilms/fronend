@@ -5,6 +5,7 @@ import InvoicePreview from "../../components/InvoicePreview";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import { createRoot } from 'react-dom/client';
+import JSZip from 'jszip';
 
 export default function CreateInvoicePage() {
   const [invoices, setInvoices] = useState<any[]>([]);
@@ -199,47 +200,325 @@ export default function CreateInvoicePage() {
 
   // Download a single invoice as PDF
   const handleDownloadInvoice = async (inv: any, idx: number) => {
-    // Get the exact invoice number that will be used in preview
-    const exactInvoiceNo = inv.invoiceId || inv.invoiceNo || inv["Invoice No"] || `INV${idx + 1}`;
-    
-    let hiddenDiv = document.createElement('div');
-    hiddenDiv.style.position = 'fixed';
-    hiddenDiv.style.left = '-9999px';
-    hiddenDiv.style.top = '0';
-    hiddenDiv.style.width = '800px';
-    hiddenDiv.style.background = '#fff';
-    document.body.appendChild(hiddenDiv);
-    const reactRoot = createRoot(hiddenDiv);
-    reactRoot.render(
-      <InvoicePreview data={{ ...inv, share, gstType, gstRate, invoiceNo: exactInvoiceNo }} showDownloadButton={false} isPdfExport={true} />
-    );
-    await new Promise(r => setTimeout(r, 400));
-    const images = Array.from(hiddenDiv.querySelectorAll('img'));
-    await Promise.all(images.map(img => {
-      if (img.complete && img.naturalHeight !== 0) return Promise.resolve();
-      return new Promise(res => { img.onload = img.onerror = res; });
-    }));
-    const canvas = await html2canvas(hiddenDiv, { scale: 2, backgroundColor: '#fff' });
-    const imgData = canvas.toDataURL("image/png");
-    const pdf = new jsPDF({ orientation: "p", unit: "pt", format: "a4" });
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const imgWidth = canvas.width;
-    const imgHeight = canvas.height;
-    const pdfWidth = Math.min(800, pageWidth - 80);
-    const pdfHeight = (imgHeight * pdfWidth) / imgWidth;
-    const x = (pageWidth - pdfWidth) / 2;
-    const y = 40;
-    pdf.addImage(imgData, "PNG", x, y, pdfWidth, pdfHeight);
-    pdf.save(`Invoice_${exactInvoiceNo}.pdf`);
-    reactRoot.unmount();
-    document.body.removeChild(hiddenDiv);
+    try {
+      // Get the exact invoice number that will be used in preview
+      const exactInvoiceNo = (inv as any)["Invoice No"] || '-';
+      
+      // Use the optimized PDF generation function with individual settings
+      const { filename, data } = await generatePDFForZip({ ...inv, share, gstType, gstRate, invoiceNo: exactInvoiceNo }, idx);
+      
+      // Convert Uint8Array to Blob and download
+      const blob = new Blob([data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('PDF generation error:', error);
+      alert('Error generating PDF. Please try again.');
+    }
   };
 
   // Download all selected invoices
+  // Function to generate PDF for ZIP (optimized for size)
+  const generatePDFForZip = async (invoice: any, index: number): Promise<{ filename: string, data: Uint8Array }> => {
+    try {
+      // Create a hidden div for InvoicePreview
+      let hiddenDiv = document.createElement('div');
+      hiddenDiv.style.position = 'fixed';
+      hiddenDiv.style.left = '-9999px';
+      hiddenDiv.style.top = '0';
+      hiddenDiv.style.width = '800px';
+      hiddenDiv.style.background = '#fff';
+      hiddenDiv.style.color = '#000';
+      hiddenDiv.style.fontFamily = 'Arial, Helvetica, sans-serif';
+      
+      // Add optimized style tag for minimum file size
+      const styleTag = document.createElement('style');
+      styleTag.textContent = `
+        * {
+          color: #000 !important;
+          background-color: #fff !important;
+          border-color: #000 !important;
+        }
+        .bg-orange-600 { background-color: #ea580c !important; }
+        .bg-blue-600 { background-color: #2563eb !important; }
+        .text-white { color: #fff !important; }
+        .text-black { color: #000 !important; }
+        .border-black { border-color: #000 !important; }
+        
+                  /* Preserve stamp size in PDF - prevent any distortion */
+          img[src*="Stamp_mum.png"] {
+            width: 144px !important; /* 120px + 20% = 144px */
+            height: 120px !important;
+            object-fit: contain !important;
+            min-width: 144px !important;
+            max-width: 144px !important;
+            min-height: 120px !important;
+            max-height: 120px !important;
+            aspect-ratio: 1.2/1 !important; /* 20% wider */
+            transform: none !important;
+            scale: 1 !important;
+            flex-shrink: 0 !important;
+            flex-grow: 0 !important;
+            box-sizing: border-box !important;
+            display: block !important;
+            position: static !important;
+          }
+        
+                  /* Prevent any flex container from compressing the stamp */
+          div:has(img[src*="Stamp_mum.png"]) {
+            width: 144px !important; /* 120px + 20% = 144px */
+            height: 120px !important;
+            flex-shrink: 0 !important;
+            flex-grow: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            min-width: 144px !important;
+            max-width: 144px !important;
+            min-height: 120px !important;
+            max-height: 120px !important;
+          }
+        
+        /* Prevent parent containers from affecting stamp */
+        div:has(div:has(img[src*="Stamp_mum.png"])) {
+          flex-shrink: 0 !important;
+          min-width: fit-content !important;
+        }
+        
+        /* Fix terms and conditions positioning */
+        .w-full[style*="fontSize: 13"] {
+          position: relative !important;
+          margin-top: 16px !important;
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
+          position: static !important;
+          transform: none !important;
+        }
+        
+        /* Ensure terms content stays in position */
+        .p-2[style*="position: relative"] {
+          position: relative !important;
+          margin: 0 !important;
+          padding: 8px 16px !important;
+          position: static !important;
+          transform: none !important;
+        }
+        
+        /* Prevent any layout shifts in terms section */
+        ol[style*="margin: 0"] {
+          margin: 0 !important;
+          padding: 0 !important;
+          position: relative !important;
+        }
+        
+        li[style*="marginBottom: '8px'"] {
+          margin-bottom: 8px !important;
+          line-height: 1.4 !important;
+          position: relative !important;
+        }
+      `;
+      hiddenDiv.appendChild(styleTag);
+      document.body.appendChild(hiddenDiv);
+
+      // Render InvoicePreview into hiddenDiv
+      const reactRoot = createRoot(hiddenDiv);
+      reactRoot.render(
+        <InvoicePreview data={invoice} showDownloadButton={false} isPdfExport={true} />
+      );
+
+      // Wait for render and images to load
+      await new Promise(r => setTimeout(r, 500)); // Reduced wait time
+      
+      // Remove problematic CSS classes
+      const allElements = hiddenDiv.querySelectorAll('*');
+      allElements.forEach(element => {
+        if (element instanceof HTMLElement) {
+          const classesToRemove = Array.from(element.classList).filter(cls => 
+            cls.includes('bg-') || cls.includes('text-') || cls.includes('border-')
+          );
+          classesToRemove.forEach(cls => element.classList.remove(cls));
+        }
+      });
+      
+      // Ensure stamp maintains exact size
+      const stampElements = hiddenDiv.querySelectorAll('img[src*="Stamp_mum.png"]');
+      stampElements.forEach((stamp: Element) => {
+        if (stamp instanceof HTMLElement) {
+          stamp.style.width = '144px'; /* 120px + 20% = 144px */
+          stamp.style.height = '120px';
+          stamp.style.objectFit = 'contain';
+          stamp.style.minWidth = '144px';
+          stamp.style.maxWidth = '144px';
+          stamp.style.minHeight = '120px';
+          stamp.style.maxHeight = '120px';
+          stamp.style.aspectRatio = '1.2/1'; /* 20% wider */
+          stamp.style.transform = 'none';
+          stamp.style.scale = '1';
+          stamp.style.flexShrink = '0';
+          stamp.style.flexGrow = '0';
+          stamp.style.boxSizing = 'border-box';
+          
+          const container = stamp.parentElement;
+          if (container) {
+            container.style.width = '144px'; /* 120px + 20% = 144px */
+            container.style.height = '120px';
+            container.style.flexShrink = '0';
+            container.style.flexGrow = '0';
+            container.style.display = 'flex';
+            container.style.alignItems = 'center';
+            container.style.justifyContent = 'center';
+            container.style.minWidth = '144px';
+            container.style.maxWidth = '144px';
+            container.style.minHeight = '120px';
+            container.style.maxHeight = '120px';
+          }
+          
+          const parentContainer = container?.parentElement;
+          if (parentContainer) {
+            parentContainer.style.flexShrink = '0';
+            parentContainer.style.minWidth = 'fit-content';
+          }
+        }
+      });
+      
+      // Use html2canvas with optimized settings for minimum file size
+      const canvas = await html2canvas(hiddenDiv, { 
+        scale: 1.2, // Further reduced for ZIP files
+        backgroundColor: '#fff',
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        removeContainer: true,
+        imageTimeout: 3000, // Reduced timeout
+        onclone: (clonedDoc) => {
+          const clonedStamp = clonedDoc.querySelector('img[src*="Stamp_mum.png"]');
+          if (clonedStamp instanceof HTMLElement) {
+            clonedStamp.style.width = '144px'; /* 120px + 20% = 144px */
+            clonedStamp.style.height = '120px';
+            clonedStamp.style.objectFit = 'contain';
+            clonedStamp.style.aspectRatio = '1.2/1'; /* 20% wider */
+            clonedStamp.style.transform = 'none';
+            clonedStamp.style.scale = '1';
+            clonedStamp.style.flexShrink = '0';
+            clonedStamp.style.flexGrow = '0';
+          }
+        },
+        ignoreElements: (element) => {
+          const style = window.getComputedStyle(element);
+          return style.color.includes('oklch') || 
+                 style.backgroundColor.includes('oklch') ||
+                 style.borderColor.includes('oklch');
+        }
+      });
+      
+      // Optimize image data for minimum size
+      const imgData = canvas.toDataURL("image/jpeg", 0.7); // Lower quality for ZIP
+      const pdf = new jsPDF({ 
+        orientation: "p", 
+        unit: "pt", 
+        format: "a4",
+        compress: true
+      });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      const pdfWidth = Math.min(650, pageWidth - 50); // Smaller width for ZIP
+      const pdfHeight = (imgHeight * pdfWidth) / imgWidth;
+      const x = (pageWidth - pdfWidth) / 2;
+      const y = 25; // Reduced top margin
+      pdf.addImage(imgData, "JPEG", x, y, pdfWidth, pdfHeight, undefined, 'FAST');
+      
+      const pdfData = pdf.output('arraybuffer');
+      const invoiceNo = invoice.invoiceNo || invoice.invoiceId || (invoice as any)?.["Invoice No"] || '-';
+      const filename = invoiceNo === '-' ? `Invoice_${Date.now()}_${index}.pdf` : `Invoice_${invoiceNo}.pdf`;
+
+      // Clean up
+      reactRoot.unmount();
+      document.body.removeChild(hiddenDiv);
+      
+      return { filename, data: new Uint8Array(pdfData) };
+    } catch (error) {
+      console.error('PDF generation error:', error);
+      throw error;
+    }
+  };
+
   const handleDownloadAll = async () => {
-    const currentInvoices = previewSource === 'backend' ? backendInvoices : invoices;
-    for (const idx of selectedInvoices) {
-      await handleDownloadInvoice(currentInvoices[idx], idx);
+    try {
+      const currentInvoices = previewSource === 'backend' ? backendInvoices : invoices;
+      const selectedInvoicesData = selectedInvoices.map(idx => currentInvoices[idx]);
+      
+      if (selectedInvoicesData.length === 0) {
+        alert('Please select at least one invoice to download.');
+        return;
+      }
+
+      // Show loading message
+      const loadingMsg = document.createElement('div');
+      loadingMsg.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 20px;
+        border-radius: 10px;
+        z-index: 10000;
+        font-family: Arial, sans-serif;
+        font-size: 16px;
+      `;
+      loadingMsg.textContent = `Generating ${selectedInvoicesData.length} PDFs for ZIP...`;
+      document.body.appendChild(loadingMsg);
+
+      // Create ZIP file
+      const zip = new JSZip();
+      
+      // Generate PDFs and add to ZIP
+      for (let i = 0; i < selectedInvoicesData.length; i++) {
+        const invoice = selectedInvoicesData[i];
+        try {
+          const { filename, data } = await generatePDFForZip(invoice, i);
+          zip.file(filename, data);
+          
+          // Update loading message
+          loadingMsg.textContent = `Generated ${i + 1}/${selectedInvoicesData.length} PDFs...`;
+        } catch (error) {
+          console.error(`Error generating PDF for invoice ${i + 1}:`, error);
+        }
+      }
+
+      // Generate and download ZIP
+      loadingMsg.textContent = 'Creating ZIP file...';
+      const zipBlob = await zip.generateAsync({ 
+        type: 'blob',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 } // Balanced compression
+      });
+      
+      // Download ZIP file
+      const url = URL.createObjectURL(zipBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Invoices_Batch_${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      // Remove loading message
+      document.body.removeChild(loadingMsg);
+      
+      alert(`Successfully downloaded ${selectedInvoicesData.length} invoices as ZIP file!`);
+    } catch (error) {
+      console.error('ZIP generation error:', error);
+      alert('Error generating ZIP file. Please try again.');
     }
   };
 
@@ -304,7 +583,7 @@ export default function CreateInvoicePage() {
                     onChange={e => { e.stopPropagation(); handleSelectOne(idx, e.target.checked); }}
                     onClick={e => e.stopPropagation()}
                   />
-                  <span>{inv["Invoice No"] || inv["invoiceNo"] || inv["invoiceId"] || inv["clientName"] || `Invoice #${idx + 1}`}</span>
+                  <span>{inv["Invoice No"] || '-'}</span>
                 </div>
                 <button
                   className="ml-2 bg-orange-500 hover:bg-orange-700 text-white font-bold px-2 py-1 rounded text-xs shadow"
