@@ -13,6 +13,7 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [showEdit, setShowEdit] = useState(false);
   const [editInvoice, setEditInvoice] = useState<any>(null);
+  const [backendError, setBackendError] = useState<string>('');
 
   // Memoize invoice data for preview
   const memoizedInvoiceData = useMemo(() => {
@@ -34,24 +35,58 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
   // Fetch invoices from backend
   useEffect(() => {
     console.log('Fetching invoices from backend...');
-    fetch('https://backend-invoice-gen.onrender.com/api/invoices')
+    
+    // Add timeout and better error handling
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    
+    fetch('https://backend-invoice-gen.onrender.com/api/invoices', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      signal: controller.signal,
+      mode: 'cors'
+    })
       .then(res => {
+        clearTimeout(timeoutId);
         console.log('Response status:', res.status);
         if (!res.ok) {
           throw new Error(`HTTP error! status: ${res.status}`);
         }
         return res.json();
       })
-      .then(data => {
-        console.log('Fetched invoices:', data);
-        setInvoices(data);
-        
-
-      })
-      .catch((error) => {
-        console.error('Error fetching invoices:', error);
-        setInvoices([]);
-      });
+              .then(data => {
+          console.log('Fetched invoices:', data);
+          if (Array.isArray(data)) {
+            setInvoices(data);
+            setBackendError(''); // Clear error on success
+          } else {
+            console.warn('Backend returned non-array data:', data);
+            setInvoices([]);
+            setBackendError('Invalid data format received from server');
+          }
+        })
+              .catch((error) => {
+          clearTimeout(timeoutId);
+          console.error('Error fetching invoices:', error);
+          
+          // Show user-friendly error message
+          let errorMessage = 'Unable to load invoices from server';
+          if (error.name === 'AbortError') {
+            errorMessage = 'Request timed out - server may be slow';
+            console.log('Request timed out - backend may be slow');
+          } else if (error.message.includes('CORS')) {
+            errorMessage = 'CORS error - server configuration issue';
+            console.log('CORS error - backend needs to allow this domain');
+          } else if (error.message.includes('500')) {
+            errorMessage = 'Server error - backend temporarily unavailable';
+            console.log('Backend server error - may be temporarily unavailable');
+          }
+          
+          setBackendError(errorMessage);
+          setInvoices([]);
+        });
   }, []);
 
   // Helper function to parse date safely
@@ -547,6 +582,21 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
         </div>
 
 
+
+        {/* Backend Error Message */}
+        {backendError && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+              <span className="text-red-700 font-medium">{backendError}</span>
+            </div>
+            <p className="text-red-600 text-sm mt-1">
+              You can still create new invoices using the "Create Invoice" button above.
+            </p>
+          </div>
+        )}
 
         {/* Filter Status */}
         {(search || filter !== 'Show All') && (
