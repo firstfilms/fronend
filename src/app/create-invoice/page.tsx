@@ -48,7 +48,7 @@ export default function CreateInvoicePage() {
   // Check for duplicate invoices in backend
   const checkForDuplicates = async (invoicesToCheck: any[]) => {
     try {
-      const fetchRes = await fetch('https://backend-invoice-gen.onrender.com/api/invoices');
+      const fetchRes = await fetch('/api/proxy');
       if (fetchRes.ok) {
         const backendInvoices = await fetchRes.json();
         
@@ -123,7 +123,7 @@ export default function CreateInvoicePage() {
       const formData = new FormData();
       formData.append('excel', file);
       formData.append('invoiceData', JSON.stringify(invoices)); // send all invoices as array
-      const res = await fetch('https://backend-invoice-gen.onrender.com/api/invoice-upload', {
+      const res = await fetch('/api/proxy', {
         method: 'POST',
         body: formData,
       });
@@ -134,7 +134,7 @@ export default function CreateInvoicePage() {
         throw new Error('Failed to upload invoice');
       }
       // After upload, fetch the latest invoices from backend
-      const fetchRes = await fetch('https://backend-invoice-gen.onrender.com/api/invoices');
+      const fetchRes = await fetch('/api/proxy');
       console.log('Fetch response status:', fetchRes.status);
       if (fetchRes.ok) {
         const backendAll = await fetchRes.json();

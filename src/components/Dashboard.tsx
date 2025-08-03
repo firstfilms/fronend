@@ -40,13 +40,13 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
     
-    fetch('https://backend-invoice-gen.onrender.com/api/invoices', {
+    // Use local proxy to avoid CORS issues
+    fetch('/api/proxy', {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
       },
       signal: controller.signal,
-      mode: 'cors'
     })
       .then(res => {
         clearTimeout(timeoutId);
