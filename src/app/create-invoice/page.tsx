@@ -115,36 +115,35 @@ export default function CreateInvoicePage() {
   const uploadToBackend = async () => {
     if (!invoices.length) return;
     try {
-      console.log('Uploading to backend...');
-      // Find the file input
       const fileInput = document.getElementById('excel-upload') as HTMLInputElement;
       const file = fileInput?.files?.[0];
       if (!file) return;
       const formData = new FormData();
       formData.append('excel', file);
-      formData.append('invoiceData', JSON.stringify(invoices)); // send all invoices as array
-      const res = await fetch('/api/proxy', {
+      formData.append('invoiceData', JSON.stringify(invoices));
+      
+      const res = await fetch('/api/proxy?path=invoice-upload', {
         method: 'POST',
         body: formData,
       });
-      console.log('Upload response status:', res.status);
+      
       if (!res.ok) {
         const errorText = await res.text();
         console.error('Upload error:', errorText);
         throw new Error('Failed to upload invoice');
       }
+      
       // After upload, fetch the latest invoices from backend
       const fetchRes = await fetch('/api/proxy');
-      console.log('Fetch response status:', fetchRes.status);
       if (fetchRes.ok) {
         const backendAll = await fetchRes.json();
         const { invoiceIds } = await res.json();
-        console.log('Uploaded invoice IDs:', invoiceIds);
-        const newBackendInvoices = backendAll.filter((inv: { invoiceId: string }) => invoiceIds.includes(inv.invoiceId));
-        setBackendInvoices(newBackendInvoices.map((inv: { data: any, invoiceId: string, invoiceNo?: string }) => ({ 
+        const newBackendInvoices = backendAll.filter((inv: { invoiceNo: string }) => invoiceIds.includes(inv.invoiceNo));
+        
+        setBackendInvoices(newBackendInvoices.map((inv: { data: any, invoiceNo: string, invoiceId: string }) => ({ 
           ...inv.data, 
-          invoiceId: inv.invoiceId,
-          invoiceNo: inv.invoiceNo || inv.invoiceId // Use invoiceNo from backend or fallback to invoiceId
+          invoiceNo: inv.data.invoiceNo || inv.invoiceNo || inv.invoiceId || "", // Use Excel value first, then fallback
+          invoiceId: inv.invoiceId
         })));
         setSelectedIdx(0);
         setShowPreview(true);
@@ -201,13 +200,9 @@ export default function CreateInvoicePage() {
   // Download a single invoice as PDF
   const handleDownloadInvoice = async (inv: any, idx: number) => {
     try {
-      // Get the exact invoice number that will be used in preview
-      const exactInvoiceNo = (inv as any)["Invoice No"] || '-';
+      const { filename, data } = await generatePDFForZip(inv, idx);
       
-      // Use the optimized PDF generation function with individual settings
-      const { filename, data } = await generatePDFForZip({ ...inv, share, gstType, gstRate, invoiceNo: exactInvoiceNo }, idx);
-      
-      // Convert Uint8Array to Blob and download
+      // Create blob and download
       const blob = new Blob([data], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -217,9 +212,11 @@ export default function CreateInvoicePage() {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
+      
+      alert(`Invoice ${filename} downloaded successfully!`);
     } catch (error) {
-      console.error('PDF generation error:', error);
-      alert('Error generating PDF. Please try again.');
+      console.error('Download error:', error);
+      alert('Error downloading invoice. Please try again.');
     }
   };
 
@@ -228,12 +225,12 @@ export default function CreateInvoicePage() {
   const generatePDFForZip = async (invoice: any, index: number): Promise<{ filename: string, data: Uint8Array }> => {
     try {
       // Create a hidden div for InvoicePreview
-      let hiddenDiv = document.createElement('div');
-      hiddenDiv.style.position = 'fixed';
-      hiddenDiv.style.left = '-9999px';
-      hiddenDiv.style.top = '0';
-      hiddenDiv.style.width = '800px';
-      hiddenDiv.style.background = '#fff';
+    let hiddenDiv = document.createElement('div');
+    hiddenDiv.style.position = 'fixed';
+    hiddenDiv.style.left = '-9999px';
+    hiddenDiv.style.top = '0';
+    hiddenDiv.style.width = '800px';
+    hiddenDiv.style.background = '#fff';
       hiddenDiv.style.color = '#000';
       hiddenDiv.style.fontFamily = 'Arial, Helvetica, sans-serif';
       
@@ -324,11 +321,11 @@ export default function CreateInvoicePage() {
         }
       `;
       hiddenDiv.appendChild(styleTag);
-      document.body.appendChild(hiddenDiv);
+    document.body.appendChild(hiddenDiv);
 
       // Render InvoicePreview into hiddenDiv
-      const reactRoot = createRoot(hiddenDiv);
-      reactRoot.render(
+    const reactRoot = createRoot(hiddenDiv);
+    reactRoot.render(
         <InvoicePreview data={invoice} showDownloadButton={false} isPdfExport={true} />
       );
 
@@ -425,14 +422,14 @@ export default function CreateInvoicePage() {
         format: "a4",
         compress: true
       });
-      const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
+    const imgWidth = canvas.width;
+    const imgHeight = canvas.height;
       
       // Calculate dimensions to fit content properly with margins
       const pdfWidth = Math.min(600, pageWidth - 80); // Smaller width with more margin for ZIP
-      const pdfHeight = (imgHeight * pdfWidth) / imgWidth;
+    const pdfHeight = (imgHeight * pdfWidth) / imgWidth;
       
       // Check if content fits on one page, if not, scale it down
       let finalPdfWidth = pdfWidth;
@@ -452,12 +449,12 @@ export default function CreateInvoicePage() {
       pdf.addImage(imgData, "JPEG", x, y, finalPdfWidth, finalPdfHeight, undefined, 'FAST');
       
       const pdfData = pdf.output('arraybuffer');
-      const invoiceNo = invoice.invoiceNo || invoice.invoiceId || (invoice as any)?.["Invoice No"] || '-';
-      const filename = invoiceNo === '-' ? `Invoice_${Date.now()}_${index}.pdf` : `Invoice_${invoiceNo}.pdf`;
+              const invoiceNo = invoice.invoiceNo || '';
+              const filename = invoiceNo ? `Invoice_${invoiceNo}.pdf` : `Invoice_${Date.now()}_${index}.pdf`;
 
       // Clean up
-      reactRoot.unmount();
-      document.body.removeChild(hiddenDiv);
+    reactRoot.unmount();
+    document.body.removeChild(hiddenDiv);
       
       return { filename, data: new Uint8Array(pdfData) };
     } catch (error) {
@@ -468,7 +465,7 @@ export default function CreateInvoicePage() {
 
   const handleDownloadAll = async () => {
     try {
-      const currentInvoices = previewSource === 'backend' ? backendInvoices : invoices;
+    const currentInvoices = previewSource === 'backend' ? backendInvoices : invoices;
       const selectedInvoicesData = selectedInvoices.map(idx => currentInvoices[idx]);
       
       if (selectedInvoicesData.length === 0) {
@@ -573,6 +570,7 @@ export default function CreateInvoicePage() {
             <span>Invoice List</span>
           </div>
           <div className="flex flex-row items-center justify-between px-4 py-2">
+            <div className="flex gap-2">
             <button
               className="bg-orange-600 hover:bg-orange-700 text-white font-bold px-3 py-1 rounded transition text-xs shadow"
               onClick={handleDownloadAll}
@@ -580,6 +578,7 @@ export default function CreateInvoicePage() {
             >
               Download All
             </button>
+            </div>
             <span className="text-xs text-gray-500">{selectedInvoices.length} selected</span>
           </div>
           <div className="flex-1 overflow-y-auto">
@@ -600,7 +599,7 @@ export default function CreateInvoicePage() {
                     onChange={e => { e.stopPropagation(); handleSelectOne(idx, e.target.checked); }}
                     onClick={e => e.stopPropagation()}
                   />
-                  <span>{inv["Invoice No"] || '-'}</span>
+                                          <span>{inv.invoiceNo || ''}</span>
                 </div>
                 <button
                   className="ml-2 bg-orange-500 hover:bg-orange-700 text-white font-bold px-2 py-1 rounded text-xs shadow"
@@ -618,8 +617,8 @@ export default function CreateInvoicePage() {
             previewSource === 'backend' && backendInvoices.length > 0 ? (
               <InvoicePreview data={{
                 ...backendInvoices[selectedIdx],
-                invoiceId: backendInvoices[selectedIdx]?.invoiceId,
-                invoiceNo: backendInvoices[selectedIdx]?.invoiceNo || backendInvoices[selectedIdx]?.invoiceId // Use invoiceNo or fallback
+                
+                invoiceNo: backendInvoices[selectedIdx]?.invoiceNo || ""
               }} />
             ) : invoices.length > 0 ? (
               <InvoicePreview data={invoices[selectedIdx]} />

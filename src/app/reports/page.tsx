@@ -13,7 +13,7 @@ const ReportsPage = () => {
   const [generatingReport, setGeneratingReport] = useState(false);
 
   useEffect(() => {
-    fetch('https://backend-invoice-gen.onrender.com/api/invoices')
+          fetch('/api/proxy')
       .then(res => res.json())
       .then(data => {
         setInvoices(data);
@@ -376,7 +376,7 @@ const ReportsPage = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Movie Name (Optional)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Movie Name</label>
                 <select
                   value={selectedMovie}
                   onChange={(e) => setSelectedMovie(e.target.value)}

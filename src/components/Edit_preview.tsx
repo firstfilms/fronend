@@ -131,8 +131,8 @@ const defaultInvoice = {
   centre: "MUMBAI",
   placeOfService: "MAHARASHTRA",
   businessTerritory: "MUMBAI",
-  invoiceNo: "NV060",
-  invoiceId: "NV060",
+  invoiceNo: "",
+  invoiceId: "",
   invoiceDate: "2025-06-23",
   movieName: "NARIVETTA",
   movieVersion: "2D",
@@ -140,14 +140,14 @@ const defaultInvoice = {
   screenFormat: "1",
   week: "1",
   cinemaWeek: "1",
-  screeningFrom: "2025-05-23",
-  screeningTo: "2025-05-29",
+  screeningFrom: "23/05/2025",
+  screeningTo: "29/05/2025",
   hsnSacCode: "997332",
   description: "Theatrical Exhibition Rights",
   distributionPercent: 45,
   table: [
-    { date: "2025-05-23", show: 1, aud: 10, collection: 1542.39, deduction: "", deductionAmt: 0 },
-    { date: "2025-05-24", show: 1, aud: 2, collection: 389.82, deduction: "", deductionAmt: 0 },
+    { date: "23/05/2025", show: 1, aud: 10, collection: 1542.39, deduction: "", deductionAmt: 0 },
+    { date: "24/05/2025", show: 1, aud: 2, collection: 389.82, deduction: "", deductionAmt: 0 },
   ],
   showTax: 1200,
   otherDeduction: 120,
@@ -170,7 +170,15 @@ const defaultInvoice = {
 };
 
 const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = true }: { data?: typeof defaultInvoice, onChange?: (invoice: any) => void, showDownloadButton?: boolean }) => {
-  const [invoice, setInvoice] = useState({ ...defaultInvoice, ...data });
+  // Use ONLY Excel invoice number
+  const mergedData = { ...defaultInvoice, ...data };
+  if (data?.invoiceNo) {
+    mergedData.invoiceNo = data.invoiceNo;
+  }
+  console.log("Edit_preview - Invoice number from Excel:", data?.invoiceNo);
+  console.log("Edit_preview - Full data:", data);
+  console.log("Edit_preview - Merged invoice number:", mergedData.invoiceNo);
+  const [invoice, setInvoice] = useState(mergedData);
   const previewRef = useRef<HTMLDivElement>(null);
   const hiddenPreviewRef = useRef<HTMLDivElement>(null);
 
@@ -202,19 +210,39 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
     return 0;
   };
 
-  // Generate 7 days of dates from screening start to end date
+  // Generate dates from screening start to end date in DD/MM/YYYY format
   const generateDateRange = (startDate: string, endDate: string) => {
     if (!startDate || !endDate) return [];
     
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+    // Parse dates in DD/MM/YYYY format
+    const parseDate = (dateStr: string) => {
+      if (dateStr.includes('/')) {
+        // Already in DD/MM/YYYY format
+        const [day, month, year] = dateStr.split('/');
+        return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      } else if (dateStr.includes('-')) {
+        // Convert from YYYY-MM-DD or DD-MM-YYYY to DD/MM/YYYY
+        const parts = dateStr.split('-');
+        if (parts[0].length === 4) {
+          // YYYY-MM-DD format
+          return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        } else {
+          // DD-MM-YYYY format
+          return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+        }
+      }
+      return new Date(dateStr);
+    };
+    
+    const start = parseDate(startDate);
+    const end = parseDate(endDate);
     const dates = [];
     
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       const day = d.getDate().toString().padStart(2, '0');
       const month = (d.getMonth() + 1).toString().padStart(2, '0');
       const year = d.getFullYear();
-      dates.push(`${day}-${month}-${year}`);
+      dates.push(`${day}/${month}/${year}`);
     }
     
     return dates;
@@ -231,27 +259,20 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
     // Create a map of existing data by date for quick lookup
     const existingDataMap = new Map();
     originalRows.forEach(row => {
-      if (row.date) {
-        // Normalize date format for comparison - handle multiple formats
+      if (row && row.date) {
+        // Normalize date format for comparison - convert to DD/MM/YYYY
         let normalizedDate = row.date;
         
-        // Handle DD/MM/YYYY format
-        if (normalizedDate.includes('/')) {
-          const parts = normalizedDate.split('/');
-          if (parts.length === 3) {
-            normalizedDate = `${parts[0]}-${parts[1]}-${parts[2]}`;
-          }
-        }
-        
-        // Handle DD-MM-YYYY format (already correct)
-        if (normalizedDate.includes('-') && normalizedDate.split('-').length === 3) {
-          // Keep as is
-        }
-        
-        // Handle YYYY-MM-DD format
-        if (normalizedDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        // Handle different date formats and convert to DD/MM/YYYY
+        if (normalizedDate.includes('-')) {
           const parts = normalizedDate.split('-');
-          normalizedDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+          if (parts[0].length === 4) {
+            // YYYY-MM-DD format
+            normalizedDate = `${parts[2]}/${parts[1]}/${parts[0]}`;
+          } else {
+            // DD-MM-YYYY format
+            normalizedDate = `${parts[0]}/${parts[1]}/${parts[2]}`;
+          }
         }
         
         existingDataMap.set(normalizedDate, row);
@@ -328,16 +349,16 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
   // PDF Export
   const handleDownloadPDF = async () => {
     try {
-      // Get the exact invoice number that is displayed in the preview
+    // Get the exact invoice number that is displayed in the preview
       const exactInvoiceNo = (invoice as any)["Invoice No"] || '-';
-      
-      // Create a hidden div for InvoicePreview
-      let hiddenDiv = document.createElement('div');
-      hiddenDiv.style.position = 'fixed';
-      hiddenDiv.style.left = '-9999px';
-      hiddenDiv.style.top = '0';
-      hiddenDiv.style.width = '800px';
-      hiddenDiv.style.background = '#fff';
+    
+    // Create a hidden div for InvoicePreview
+    let hiddenDiv = document.createElement('div');
+    hiddenDiv.style.position = 'fixed';
+    hiddenDiv.style.left = '-9999px';
+    hiddenDiv.style.top = '0';
+    hiddenDiv.style.width = '800px';
+    hiddenDiv.style.background = '#fff';
       // Remove any problematic CSS that might cause oklch errors
       hiddenDiv.style.color = '#000';
       hiddenDiv.style.fontFamily = 'Arial, Helvetica, sans-serif';
@@ -429,26 +450,26 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
 
         `;
       hiddenDiv.appendChild(styleTag);
-      document.body.appendChild(hiddenDiv);
+    document.body.appendChild(hiddenDiv);
       
-      // Render InvoicePreview into hiddenDiv with exact invoice number
-      const reactRoot = createRoot(hiddenDiv);
-      reactRoot.render(
-        <InvoicePreview
-          data={{
-            ...invoice,
-            invoiceNo: exactInvoiceNo, // Ensure exact invoice number is used
-            distributionPercent: String(invoice.distributionPercent ?? ''),
-            cgstRate: String(invoice.cgstRate ?? ''),
-            sgstRate: String(invoice.sgstRate ?? ''),
-            gstRate: String(invoice.gstRate ?? ''),
-            taxType: invoice.taxType === 'GST' || invoice.taxType === 'IGST' ? invoice.taxType : undefined,
-          }}
-          showDownloadButton={false}
-        />
-      );
+    // Render InvoicePreview into hiddenDiv with exact invoice number
+    const reactRoot = createRoot(hiddenDiv);
+    reactRoot.render(
+      <InvoicePreview
+        data={{
+          ...invoice,
+          invoiceNo: exactInvoiceNo, // Ensure exact invoice number is used
+          distributionPercent: String(invoice.distributionPercent ?? ''),
+          cgstRate: String(invoice.cgstRate ?? ''),
+          sgstRate: String(invoice.sgstRate ?? ''),
+          gstRate: String(invoice.gstRate ?? ''),
+          taxType: invoice.taxType === 'GST' || invoice.taxType === 'IGST' ? invoice.taxType : undefined,
+        }}
+        showDownloadButton={false}
+      />
+    );
       
-      // Wait for render
+    // Wait for render
       await new Promise(r => setTimeout(r, 600));
       
       // Remove any problematic CSS classes that might contain oklch
@@ -546,13 +567,13 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
         format: "a4",
         compress: true // Enable PDF compression
       });
-      const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgProps = pdf.getImageProperties(imgData);
+    const imgProps = pdf.getImageProperties(imgData);
       
       // Calculate dimensions to fit content properly with margins
       const pdfWidth = Math.min(650, pageWidth - 80); // Smaller width with more margin
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
       
       // Check if content fits on one page, if not, scale it down
       let finalPdfWidth = pdfWidth;
@@ -573,9 +594,9 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
       const filename = exactInvoiceNo === '-' ? `Invoice_${Date.now()}.pdf` : `Invoice_${exactInvoiceNo}.pdf`;
       pdf.save(filename);
       
-      // Clean up
-      reactRoot.unmount();
-      document.body.removeChild(hiddenDiv);
+    // Clean up
+    reactRoot.unmount();
+    document.body.removeChild(hiddenDiv);
     } catch (error) {
       console.error('PDF generation error:', error);
       alert('Error generating PDF. Please try again.');
@@ -832,7 +853,7 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
                 <span style={{ marginLeft: '20px' }}>BRANCH: AHURA CENTRE, ANDHERI WEST</span><br /><br />
                 3. Subject to Mumbai jurisdiction
               </div>
-            </div>
+        </div>
           </div>
 
           {/* Footer: Stamp and Signature */}

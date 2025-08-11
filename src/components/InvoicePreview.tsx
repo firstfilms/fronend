@@ -139,10 +139,11 @@ interface InvoiceData {
 }
 
 const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, isPdfExport = false }) => {
+
   const previewRef = useRef<HTMLDivElement>(null);
 
   // Fallbacks for static values (use blank/null for new fields)
-  // Filtered data
+    // Filtered data
   const clientName = data?.clientName ?? "MIRAJ ENTERTAINMENT LIMITED";
   const clientAddress = data?.clientAddress ?? "3RD, 2 ACME PLAZA, KURLA ROAD, OPP SANGAM BLDG CINEMA\nANDHERI EAST, MUMBAI, MAHARASHTRA, 400059";
   const panNo = data?.panNo ?? "AAFCM5147R";
@@ -151,8 +152,15 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
   const centre = data?.centre ?? "MUMBAI";
   const placeOfService = data?.placeOfService ?? "MAHARASHTRA";
   const businessTerritory = data?.businessTerritory ?? "MUMBAI";
-  // Use ONLY Excel invoice number, show dash if not provided
-  const invoiceNo = data?.["Invoice No"] || "-";
+  // Use ONLY Excel invoice number
+  // Display Excel invoice number for user, use backend ID for operations
+  // Use Excel invoice number for display - simple text, no logic
+  const displayInvoiceNo = data?.invoiceNo || ""; // Excel number for display (FF01/FF02)
+  const backendInvoiceId = data?.invoiceId || ""; // Backend ID for operations
+  console.log("InvoicePreview - Excel invoice number for display (FF01/FF02):", displayInvoiceNo);
+  console.log("InvoicePreview - Backend invoice ID for operations:", backendInvoiceId);
+  console.log("InvoicePreview - Full data received:", data);
+  console.log("InvoicePreview - Full data:", data);
   const invoiceDate = data?.invoiceDate ?? "23/06/2025";
   const movieName = data?.movieName ?? "NARIVETTA";
   const movieVersion = data?.movieVersion ?? "2D";
@@ -202,19 +210,39 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
     return d;
   };
 
-  // Generate 7 days of dates from screening start to end date
+  // Generate dates from screening start to end date in DD/MM/YYYY format
   const generateDateRange = (startDate: string, endDate: string) => {
     if (!startDate || !endDate) return [];
     
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+    // Parse dates in DD/MM/YYYY format
+    const parseDate = (dateStr: string) => {
+      if (dateStr.includes('/')) {
+        // Already in DD/MM/YYYY format
+        const [day, month, year] = dateStr.split('/');
+        return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      } else if (dateStr.includes('-')) {
+        // Convert from YYYY-MM-DD or DD-MM-YYYY to DD/MM/YYYY
+        const parts = dateStr.split('-');
+        if (parts[0].length === 4) {
+          // YYYY-MM-DD format
+          return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        } else {
+          // DD-MM-YYYY format
+          return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+        }
+      }
+      return new Date(dateStr);
+    };
+    
+    const start = parseDate(startDate);
+    const end = parseDate(endDate);
     const dates = [];
     
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       const day = d.getDate().toString().padStart(2, '0');
       const month = (d.getMonth() + 1).toString().padStart(2, '0');
       const year = d.getFullYear();
-      dates.push(`${day}-${month}-${year}`);
+      dates.push(`${day}/${month}/${year}`);
     }
     
     return dates;
@@ -236,8 +264,21 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
     if (Array.isArray(originalTableRows)) {
       originalTableRows.forEach(row => {
         if (row && row.date) {
-          // Normalize date format for comparison
-          const normalizedDate = row.date.replace(/\//g, '-');
+          // Normalize date format for comparison - convert to DD/MM/YYYY
+          let normalizedDate = row.date;
+          
+          // Handle different date formats and convert to DD/MM/YYYY
+          if (normalizedDate.includes('-')) {
+            const parts = normalizedDate.split('-');
+            if (parts[0].length === 4) {
+              // YYYY-MM-DD format
+              normalizedDate = `${parts[2]}/${parts[1]}/${parts[0]}`;
+            } else {
+              // DD-MM-YYYY format
+              normalizedDate = `${parts[0]}/${parts[1]}/${parts[2]}`;
+            }
+          }
+          
           existingDataMap.set(normalizedDate, row);
         }
       });
@@ -273,13 +314,13 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
   // PDF Export using html2canvas for pixel-perfect match
   const handleDownloadPDF = async () => {
     try {
-      // Create a hidden div for InvoicePreview
-      let hiddenDiv = document.createElement('div');
-      hiddenDiv.style.position = 'fixed';
-      hiddenDiv.style.left = '-9999px';
-      hiddenDiv.style.top = '0';
-      hiddenDiv.style.width = '800px';
-      hiddenDiv.style.background = '#fff';
+    // Create a hidden div for InvoicePreview
+    let hiddenDiv = document.createElement('div');
+    hiddenDiv.style.position = 'fixed';
+    hiddenDiv.style.left = '-9999px';
+    hiddenDiv.style.top = '0';
+    hiddenDiv.style.width = '800px';
+    hiddenDiv.style.background = '#fff';
       // Remove any problematic CSS that might cause oklch errors
       hiddenDiv.style.color = '#000';
       hiddenDiv.style.fontFamily = 'Arial, Helvetica, sans-serif';
@@ -371,18 +412,18 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
 
         `;
       hiddenDiv.appendChild(styleTag);
-      document.body.appendChild(hiddenDiv);
+    document.body.appendChild(hiddenDiv);
 
-      // Render InvoicePreview into hiddenDiv with the exact same invoice number
-      const reactRoot = createRoot(hiddenDiv);
-      reactRoot.render(
-        <InvoicePreview data={{ ...data, invoiceNo: invoiceNo }} showDownloadButton={false} isPdfExport={true} />
-      );
+    // Render InvoicePreview into hiddenDiv with the exact same invoice number
+    const reactRoot = createRoot(hiddenDiv);
+    reactRoot.render(
+        <InvoicePreview data={{ ...data, invoiceNo: displayInvoiceNo }} showDownloadButton={false} isPdfExport={true} />
+    );
 
-      // Wait for render and images to load
+    // Wait for render and images to load
       await new Promise(r => setTimeout(r, 600));
-      await waitForImagesToLoad(hiddenDiv);
-      
+    await waitForImagesToLoad(hiddenDiv);
+
       // Remove any problematic CSS classes that might contain oklch
       const allElements = hiddenDiv.querySelectorAll('*');
       allElements.forEach(element => {
@@ -478,14 +519,14 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
         format: "a4",
         compress: true // Enable PDF compression
       });
-      const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
+    const imgWidth = canvas.width;
+    const imgHeight = canvas.height;
       
       // Calculate dimensions to fit content properly with margins
       const pdfWidth = Math.min(650, pageWidth - 80); // Smaller width with more margin
-      const pdfHeight = (imgHeight * pdfWidth) / imgWidth;
+    const pdfHeight = (imgHeight * pdfWidth) / imgWidth;
       
       // Check if content fits on one page, if not, scale it down
       let finalPdfWidth = pdfWidth;
@@ -503,12 +544,12 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
       }
       
       pdf.addImage(imgData, "JPEG", x, y, finalPdfWidth, finalPdfHeight, undefined, 'FAST'); // Use FAST compression
-      const filename = invoiceNo === '-' ? `Invoice_${Date.now()}.pdf` : `Invoice_${invoiceNo}.pdf`;
+      const filename = displayInvoiceNo === '-' ? `Invoice_${Date.now()}.pdf` : `Invoice_${displayInvoiceNo}.pdf`;
       pdf.save(filename);
 
-      // Clean up
-      reactRoot.unmount();
-      document.body.removeChild(hiddenDiv);
+    // Clean up
+    reactRoot.unmount();
+    document.body.removeChild(hiddenDiv);
     } catch (error) {
       console.error('PDF generation error:', error);
       alert('Error generating PDF. Please try again.');
@@ -638,7 +679,7 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
             <div className="flex-1 p-4" style={{ fontSize: 15, paddingTop: 18, paddingBottom: 18 }}>
               <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
                 <span style={{ minWidth: 110 }}>Invoice No.</span>
-                <span style={{ fontWeight: 700, marginLeft: 16 }}>{invoiceNo || '-'}</span>
+                <span style={{ fontWeight: 700, marginLeft: 16 }}>{displayInvoiceNo || '-'}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
                 <span style={{ minWidth: 110 }}>Invoice Date</span>
@@ -824,8 +865,8 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
           {/* Remarks, Terms, Bank */}
                         <div className="w-full" style={{ fontSize: 13, position: 'relative', marginTop: '16px', pageBreakInside: 'avoid', breakInside: 'avoid' }}>
                 <div className="p-2" style={{ position: 'relative', margin: 0, padding: '8px 16px' }}>
-                  <div className="mt-2"><b>Remark:</b> {remark}</div>
-                  <div className="mt-2 font-bold">Terms & Conditions :-</div>
+              <div className="mt-2"><b>Remark:</b> {remark}</div>
+              <div className="mt-2 font-bold">Terms & Conditions :-</div>
                   <div style={{ margin: 0, padding: 0, lineHeight: '1.4' }}>
                     1. Payment is due within 14 days from the date invoice. Interest @18% pa. will be charged for payment delayed beyond that period.<br /><br />
                     2. All cheques / drafts should be crossed and made payable to<br />
@@ -834,8 +875,8 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
                     <span style={{ marginLeft: '20px' }}>BRANCH: AHURA CENTRE, ANDHERI WEST</span><br /><br />
                     3. Subject to Mumbai jurisdiction
                   </div>
-                </div>
-              </div>
+        </div>
+          </div>
 
           {/* Footer: Stamp and Signature */}
           <div className="flex flex-row items-end justify-end w-full p-4" style={{ minHeight: 100, position: 'relative', zIndex: 1 }}>

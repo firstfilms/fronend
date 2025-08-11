@@ -93,7 +93,8 @@ export function parseInvoiceExcel(file: File): Promise<InvoiceData[]> {
           centre: row[centreIdx] || '',
           placeOfService: row[placeOfServiceIdx] || '',
           table: dayGroups.map(day => ({
-            date: day.date,
+            // Convert DD-MM format to DD/MM/YYYY format
+            date: day.date.replace('-', '/') + '/2025',
             show: Number(row[day.showIdx]) || 0,
             aud: Number(row[day.audIdx]) || 0,
             collection: Number(row[day.collIdx]) || 0,

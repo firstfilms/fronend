@@ -71,12 +71,26 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
         setError("No data found in Excel file.");
         return;
       }
+      
+      // Clean up column names by trimming whitespace to prevent issues with trailing spaces
+      const cleanedRows = rows.map(row => {
+        const cleanedRow: Record<string, any> = {};
+        Object.keys(row).forEach(key => {
+          const cleanedKey = key.trim();
+          cleanedRow[cleanedKey] = row[key];
+        });
+        return cleanedRow;
+      });
+      
+      // Use cleaned rows for processing
+      const processedRows = cleanedRows;
       // For each row, build invoice object with table array and summary fields
-      const processed = rows.map((row) => {
+      const processed = processedRows.map((row) => {
         // Invoice-level fields (map Excel columns to expected keys)
         const today = new Date();
         const pad = (n: number) => n < 10 ? '0' + n : n;
         const todayStr = `${pad(today.getDate())}/${pad(today.getMonth() + 1)}/${today.getFullYear()}`;
+        
         const invoiceFields = {
           clientName: row["BILL TO"] || "",
           clientAddress: row["ADDRESS"] || "",
@@ -86,7 +100,45 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
           centre: row["CENTRE"] || "",
           placeOfService: row["PLACE OF SERVICE"] || "",
           businessTerritory: row["CIRCUIT"] || "",
-          invoiceNo: row["Invoice No"] || row["INVOICE NO"] || "-",
+          invoiceNo: (() => {
+            // Now that we've cleaned column names, we can directly access the correct column
+            let excelInvoiceNo = row["Inv_no"] || row["Inv no"] || row["INV NO"] || row["Inv No"] || row["Invoice No"] || row["INVOICE NO"] || row["Invoice Number"] || row["INVOICE NUMBER"] || "";
+            
+            // If we still don't have an invoice number, try to find any column that might contain it
+            if (!excelInvoiceNo) {
+              const allColumns = Object.keys(row);
+              const invoiceRelatedColumns = allColumns.filter(col => 
+                col.toLowerCase().includes('inv') || 
+                col.toLowerCase().includes('invoice') ||
+                col.toLowerCase().includes('no') ||
+                col.toLowerCase().includes('number')
+              );
+              for (const col of invoiceRelatedColumns) {
+                if (row[col] && row[col].toString().trim()) {
+                  excelInvoiceNo = row[col].toString().trim();
+                  break;
+                }
+              }
+            }
+            
+            // Final fallback: if still no invoice number, try to find any column with a value that looks like an invoice number
+            if (!excelInvoiceNo) {
+              const allColumns = Object.keys(row);
+              for (const col of allColumns) {
+                const value = row[col];
+                if (value && typeof value === 'string' && value.trim()) {
+                  // Check if the value looks like an invoice number (contains letters and numbers)
+                  const trimmedValue = value.trim();
+                  if (/^[A-Za-z0-9]+$/.test(trimmedValue) && trimmedValue.length >= 2) {
+                    excelInvoiceNo = trimmedValue;
+                    break;
+                  }
+                }
+              }
+            }
+            
+            return excelInvoiceNo;
+          })(),
           invoiceDate: row["Invoice Date"] || row["INVOICE DATE"] || todayStr,
           // Manual input fields - these will be overridden by user input
           movieName: movieName || row["Movie Name"] || row["MOVIE NAME"] || "",
@@ -119,8 +171,9 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
           const aud = Number(row[`${date} AUDIENCE`]) || Number(row[`${date} AUDIEN`]) || Number(row[`05 AUDIEN`]) || 0;
           const collection = Number(row[`${date} COLLECTION`]) || Number(row[`${date} COLLECT`]) || Number(row[`5 COLLECT`]) || 0;
           
-          // Convert date format from DD-MM to DD-MM-YYYY (assuming 2025 based on Excel data)
-          const formattedDate = `${date}-2025`;
+          // Convert date format from DD-MM to DD/MM/YYYY (assuming 2025 based on Excel data)
+          const [day, month] = date.split('-');
+          const formattedDate = `${day}/${month}/2025`;
           
           if (show || aud || collection) {
             table.push({
@@ -143,7 +196,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
         const totalCollectionVal = Number(row["TOTAL COLLECTION"]) || totalCollection;
         const showTax = Number(row["SHOW TAX"]) || 0;
         const otherDeduction = Number(row["OTHERS"]) || 0;
-        return {
+        const finalInvoice = {
           ...invoiceFields,
           table,
           totalShow: totalShowVal,
@@ -152,11 +205,15 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
           showTax,
           otherDeduction,
         };
+        
+        return finalInvoice;
       });
       setInvoices(processed);
       setError("");
+      
       // Pass share, gstType, gstRate to parent for preview
-      onChange && onChange(processed.map(inv => ({ ...inv, share, gstType, gstRate })), true); // true = new upload
+      const processedWithShare = processed.map(inv => ({ ...inv, share, gstType, gstRate }));
+      onChange && onChange(processedWithShare, true); // true = new upload
     };
     reader.readAsArrayBuffer(file);
   };
