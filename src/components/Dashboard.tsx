@@ -700,6 +700,23 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
           </div>
         </div>
       )}
+
+      {/* Footer */}
+      <footer className="bg-gradient-to-r from-orange-500 via-orange-400 to-orange-600 text-white py-4 mt-auto">
+        <div className="text-center">
+          <p className="text-sm font-medium">
+            Powered by{' '}
+            <a 
+              href="https://highflyersinfotech.com/" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-white hover:text-orange-200 underline transition-colors duration-200"
+            >
+              HighFlyers Infotech
+            </a>
+          </p>
+        </div>
+      </footer>
     </div>
   );
 };

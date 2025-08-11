@@ -636,7 +636,15 @@ export default function CreateInvoicePage() {
         </aside>
       </main>
       <footer className="bg-white shadow p-4 text-center text-xs text-gray-500">
-        &copy; {new Date().getFullYear()} Invoice Management. All rights reserved.
+        Powered by{' '}
+        <a 
+          href="https://highflyersinfotech.com/" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="text-blue-600 hover:text-blue-800 underline transition-colors duration-200"
+        >
+          HighFlyers Infotech
+        </a>
       </footer>
       
       {/* Warning Dialog for Duplicate Upload */}

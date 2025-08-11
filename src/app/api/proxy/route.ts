@@ -4,7 +4,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const path = searchParams.get('path') || 'invoices';
-    const backendUrl = `http://localhost:5000/api/${path}`;
+    const backendUrl = `https://backend-invoice-gen.onrender.com/api/${path}`;
     
     console.log('Proxy GET request to:', backendUrl);
     
@@ -39,10 +39,9 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-<<<<<<< HEAD
     const { searchParams } = new URL(request.url);
     const path = searchParams.get('path') || 'invoices';
-    const backendUrl = `http://localhost:5000/api/${path}`;
+    const backendUrl = `https://backend-invoice-gen.onrender.com/api/${path}`;
     
     console.log('Proxy PUT request to:', backendUrl);
     
@@ -54,15 +53,6 @@ export async function PUT(request: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
-=======
-    // Handle FormData uploads
-    const formData = await request.formData();
-    const backendUrl = 'https://backend-invoice-gen.onrender.com/api/invoice-upload';
-    
-    const response = await fetch(backendUrl, {
-      method: 'POST',
-      body: formData,
->>>>>>> 8fe3801ee96f7bdbd5ea5eaa66c193cfaeb4fa6b
     });
 
     if (!response.ok) {
@@ -91,7 +81,7 @@ export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const path = searchParams.get('path') || 'invoices';
-    const backendUrl = `http://localhost:5000/api/${path}`;
+    const backendUrl = `https://backend-invoice-gen.onrender.com/api/${path}`;
     
     console.log('Proxy DELETE request to:', backendUrl);
     
@@ -125,7 +115,7 @@ export async function POST(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const path = searchParams.get('path') || 'invoice-upload';
-    const backendUrl = `http://localhost:5000/api/${path}`;
+    const backendUrl = `https://backend-invoice-gen.onrender.com/api/${path}`;
     
     console.log('Proxy POST request to:', backendUrl);
     
