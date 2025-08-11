@@ -62,7 +62,7 @@ export default function CreateInvoicePage() {
               newInvoice.clientName === existingInvoice.data?.clientName &&
               newInvoice.invoiceDate === existingInvoice.data?.invoiceDate &&
               newInvoice.dueDate === existingInvoice.data?.dueDate &&
-              newInvoice.invoiceNo === existingInvoice.data?.invoiceNo &&
+              newInvoice["In_no"] === existingInvoice.data?.["In_no"] &&
               
               // Financial details
               newInvoice.totalAmount === existingInvoice.data?.totalAmount &&
@@ -138,12 +138,15 @@ export default function CreateInvoicePage() {
       if (fetchRes.ok) {
         const backendAll = await fetchRes.json();
         const { invoiceIds } = await res.json();
-        const newBackendInvoices = backendAll.filter((inv: { invoiceNo: string }) => invoiceIds.includes(inv.invoiceNo));
+        const newBackendInvoices = backendAll.filter((inv: { data: any }) => {
+          // ONLY use Excel "In_no" field for filtering
+          const excelInNo = inv.data?.["In_no"];
+          return excelInNo && invoiceIds.includes(excelInNo);
+        });
         
-        setBackendInvoices(newBackendInvoices.map((inv: { data: any, invoiceNo: string, invoiceId: string }) => ({ 
-          ...inv.data, 
-          invoiceNo: inv.data.invoiceNo || inv.invoiceNo || inv.invoiceId || "", // Use Excel value first, then fallback
-          invoiceId: inv.invoiceId
+        setBackendInvoices(newBackendInvoices.map((inv: { data: any }) => ({
+          ...inv.data,
+          invoiceNo: inv.data?.["In_no"] || "", // ONLY use Excel "In_no" field
         })));
         setSelectedIdx(0);
         setShowPreview(true);
@@ -449,8 +452,8 @@ export default function CreateInvoicePage() {
       pdf.addImage(imgData, "JPEG", x, y, finalPdfWidth, finalPdfHeight, undefined, 'FAST');
       
       const pdfData = pdf.output('arraybuffer');
-              const invoiceNo = invoice.invoiceNo || '';
-              const filename = invoiceNo ? `Invoice_${invoiceNo}.pdf` : `Invoice_${Date.now()}_${index}.pdf`;
+        const invoiceNo = invoice["In_no"] || invoice.invoiceNo || '';
+        const filename = invoiceNo ? `Invoice_${invoiceNo}.pdf` : `Invoice_${Date.now()}_${index}.pdf`;
 
       // Clean up
     reactRoot.unmount();
@@ -599,7 +602,7 @@ export default function CreateInvoicePage() {
                     onChange={e => { e.stopPropagation(); handleSelectOne(idx, e.target.checked); }}
                     onClick={e => e.stopPropagation()}
                   />
-                                          <span>{inv.invoiceNo || ''}</span>
+                                          <span>{inv["In_no"] || inv.invoiceNo || 'No Invoice Number'}</span>
                 </div>
                 <button
                   className="ml-2 bg-orange-500 hover:bg-orange-700 text-white font-bold px-2 py-1 rounded text-xs shadow"
@@ -612,16 +615,21 @@ export default function CreateInvoicePage() {
           </div>
         </aside>
         {/* Center: Invoice Preview */}
-        <section className="flex-1 p-6 overflow-y-auto bg-gray-50 flex justify-center items-start">
-          {showPreview && (
+        <section className="flex-1 p-6 overflow-y-auto bg-gray-50 flex flex-col items-center">
+          {/* Invoice Preview */}
+          {showPreview && invoices.length > 0 && (
             previewSource === 'backend' && backendInvoices.length > 0 ? (
               <InvoicePreview data={{
                 ...backendInvoices[selectedIdx],
                 
-                invoiceNo: backendInvoices[selectedIdx]?.invoiceNo || ""
+                invoiceNo: backendInvoices[selectedIdx]?.["In_no"] || backendInvoices[selectedIdx]?.invoiceNo || ""
               }} />
             ) : invoices.length > 0 ? (
-              <InvoicePreview data={invoices[selectedIdx]} />
+              <InvoicePreview data={{
+                ...invoices[selectedIdx],
+                "In_no": invoices[selectedIdx]?.["In_no"] || invoices[selectedIdx]?.invoiceNo || "",
+                invoiceNo: invoices[selectedIdx]?.["In_no"] || invoices[selectedIdx]?.invoiceNo || ""
+              }} />
             ) : (
               <div className="text-gray-400 text-center w-full mt-24">Upload an Excel file to preview invoices.</div>
             )
@@ -635,17 +643,6 @@ export default function CreateInvoicePage() {
           <InvoiceForm onChange={handleFormChange} onPreview={handlePreviewClick} />
         </aside>
       </main>
-      <footer className="bg-white shadow p-4 text-center text-xs text-gray-500">
-        Powered by{' '}
-        <a 
-          href="https://highflyersinfotech.com/" 
-          target="_blank" 
-          rel="noopener noreferrer"
-          className="text-blue-600 hover:text-blue-800 underline transition-colors duration-200"
-        >
-          HighFlyers Infotech
-        </a>
-      </footer>
       
       {/* Warning Dialog for Duplicate Upload */}
       {showWarningDialog && (
@@ -716,6 +713,21 @@ export default function CreateInvoicePage() {
           </div>
         </div>
       )}
+
+      {/* Footer */}
+      <footer className="bg-gradient-to-r from-orange-500 via-orange-400 to-orange-600 text-white py-4 text-center shadow-md">
+        <div className="text-center text-white text-sm py-2">
+          Powered by{' '}
+          <a 
+            href="https://highflyersinfotech.com/" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-white hover:text-orange-100 underline font-medium"
+          >
+            Highflyers Infotech
+          </a>
+        </div>
+      </footer>
     </div>
   );
 } 

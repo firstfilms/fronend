@@ -91,6 +91,7 @@ interface InvoiceData {
   businessTerritory?: string;
   invoiceNo?: string;
   "Invoice No"?: string; // Add Excel column name
+  "In_no"?: string; // Add Excel "In_no" column name
   invoiceDate?: string;
   movieName?: string;
   movieVersion?: string;
@@ -98,7 +99,6 @@ interface InvoiceData {
   screenFormat?: string;
   reels?: string;
   week?: string;
-  releaseWeek?: string;
   cinemaWeek?: string;
   screeningFrom?: string;
   screeningTo?: string;
@@ -135,15 +135,34 @@ interface InvoiceData {
   otherDeduction?: string | number;
   gstType?: 'CGST/SGST' | 'IGST'; // Added for GST/IGST selector
   share?: string | number; // Added for distribution percent
-  invoiceId?: string; // Added for invoiceId
 }
 
 const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, isPdfExport = false }) => {
 
   const previewRef = useRef<HTMLDivElement>(null);
 
+  // ONLY use Excel "In_no" field, nothing else
+  const displayInvoiceNo = (() => {
+    // ONLY use the Excel "In_no" field, nothing else
+    if (data?.["In_no"] && typeof data["In_no"] === 'string' && data["In_no"].trim()) {
+      const excelInvoiceNo = data["In_no"].trim();
+      console.log('InvoicePreview: Found Excel "In_no":', excelInvoiceNo);
+      return excelInvoiceNo;
+    }
+    
+    // If "In_no" is not found, return placeholder
+    console.warn('InvoicePreview: Excel "In_no" field not found');
+    console.log('InvoicePreview: Available fields:', Object.keys(data || {}));
+    return 'No "In_no" Found';
+  })();
+  
+  // Double-check: if somehow a backend invoice number got through, don't display it
+  if (displayInvoiceNo && displayInvoiceNo.toString().startsWith('INV')) {
+    console.error('BACKEND INVOICE NUMBER DETECTED IN INVOICE PREVIEW:', displayInvoiceNo);
+    return 'INVALID - Backend Number Detected';
+  }
+  
   // Fallbacks for static values (use blank/null for new fields)
-    // Filtered data
   const clientName = data?.clientName ?? "MIRAJ ENTERTAINMENT LIMITED";
   const clientAddress = data?.clientAddress ?? "3RD, 2 ACME PLAZA, KURLA ROAD, OPP SANGAM BLDG CINEMA\nANDHERI EAST, MUMBAI, MAHARASHTRA, 400059";
   const panNo = data?.panNo ?? "AAFCM5147R";
@@ -152,22 +171,13 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
   const centre = data?.centre ?? "MUMBAI";
   const placeOfService = data?.placeOfService ?? "MAHARASHTRA";
   const businessTerritory = data?.businessTerritory ?? "MUMBAI";
-  // Use ONLY Excel invoice number
-  // Display Excel invoice number for user, use backend ID for operations
-  // Use Excel invoice number for display - simple text, no logic
-  const displayInvoiceNo = data?.invoiceNo || ""; // Excel number for display (FF01/FF02)
-  const backendInvoiceId = data?.invoiceId || ""; // Backend ID for operations
-  console.log("InvoicePreview - Excel invoice number for display (FF01/FF02):", displayInvoiceNo);
-  console.log("InvoicePreview - Backend invoice ID for operations:", backendInvoiceId);
-  console.log("InvoicePreview - Full data received:", data);
-  console.log("InvoicePreview - Full data:", data);
+  
   const invoiceDate = data?.invoiceDate ?? "23/06/2025";
   const movieName = data?.movieName ?? "NARIVETTA";
   const movieVersion = data?.movieVersion ?? "2D";
   const language = data?.language ?? "MALAYALAM";
   const screenFormat = data?.screenFormat ?? "1";
   const week = data?.week ?? "1";
-  const releaseWeek = data?.releaseWeek ?? week;
   const cinemaWeek = data?.cinemaWeek ?? "1";
   const screeningFrom = data?.screeningFrom ?? "2025-05-23";
   const screeningTo = data?.screeningTo ?? "2025-05-29";
@@ -679,7 +689,7 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
             <div className="flex-1 p-4" style={{ fontSize: 15, paddingTop: 18, paddingBottom: 18 }}>
               <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
                 <span style={{ minWidth: 110 }}>Invoice No.</span>
-                <span style={{ fontWeight: 700, marginLeft: 16 }}>{displayInvoiceNo || '-'}</span>
+                <span style={{ fontWeight: 700, marginLeft: 16 }}>{displayInvoiceNo || 'No Invoice Number'}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
                 <span style={{ minWidth: 110 }}>Invoice Date</span>
@@ -700,7 +710,7 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
               </div>
               <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
                 <span style={{ minWidth: 110 }}>Release Week</span>
-                <span style={{ fontWeight: 700, marginLeft: 16 }}>{releaseWeek || week}</span>
+                <span style={{ fontWeight: 700, marginLeft: 16 }}>{week}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
                 <span style={{ minWidth: 110 }}>Cinema Week</span>

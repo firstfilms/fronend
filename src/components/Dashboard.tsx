@@ -20,11 +20,9 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
     if (!selectedInvoice) return {};
     try {
       const data = selectedInvoice.data || {};
-      return {
-        ...data,
-        invoiceId: selectedInvoice.invoiceId || '',
-        invoiceNo: selectedInvoice.invoiceNo || ''
-      };
+      // ONLY use Excel data, exclude backend fields like _id
+      const { _id, __v, ...excelData } = data;
+      return excelData;
     } catch (error) {
       return {};
     }
@@ -122,7 +120,7 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
   // Filtered data based on search and filter
   const filteredInvoices = invoices.filter(inv => {
     const clientName = inv.data?.clientName || inv.clientName || '';
-    const displayInvoiceNo = (inv.data as any)?.invoiceNo || '';
+    const displayInvoiceNo = (inv.data as any)?.["In_no"] || '';
     const centre = inv.data?.centre || '';
     const placeOfService = inv.data?.placeOfService || '';
     const businessTerritory = inv.data?.businessTerritory || '';
@@ -171,13 +169,41 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
   const getInvoiceData = (inv: any) => {
     if (!inv) return {};
     const data = inv.data || {};
-    const displayInvoiceNo = data.invoiceNo || inv.invoiceNo || inv.invoiceId || "";
     
+    // Only use Excel invoice number, remove backend-generated fields
     return {
       ...data,
-      invoiceId: inv.invoiceId,
-      invoiceNo: displayInvoiceNo
+      // Remove invoiceId and invoiceNo - only use Excel data
     };
+  };
+
+  // Function to find Excel invoice number - ONLY use "In_no" field
+  const findExcelInvoiceNumber = (inv: any) => {
+    const data = inv.data || {};
+    
+    // ONLY use the Excel "In_no" field, nothing else
+    if (data["In_no"] && typeof data["In_no"] === 'string' && data["In_no"].trim()) {
+      const excelInvoiceNo = data["In_no"].trim();
+      console.log('Found Excel "In_no":', excelInvoiceNo);
+      return excelInvoiceNo;
+    }
+    
+    // If "In_no" is not found, return placeholder
+    console.warn('Excel "In_no" field not found for invoice:', inv._id);
+    console.log('Available fields:', Object.keys(data));
+    return 'No "In_no" Found';
+  };
+
+  const displayInvoiceNo = (inv: any) => {
+    // Use the findExcelInvoiceNumber function
+    const excelInvoiceNo = findExcelInvoiceNumber(inv);
+    
+    // Debug logging
+    console.log('Dashboard - Invoice data:', inv);
+    console.log('Dashboard - Available fields:', Object.keys(inv.data || {}));
+    console.log('Dashboard - Found Excel invoice number:', excelInvoiceNo);
+    
+    return excelInvoiceNo;
   };
 
   // Save handler for EditPreview
@@ -228,10 +254,11 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
     };
   }, [showFilter, showPreview]);
 
-  // Add a download handler for PDF
+  // Download handler
   const handleDownloadPDF = async (inv: any) => {
     const invoiceData = getInvoiceData(inv);
-    const exactInvoiceNo = (invoiceData as any)?.invoiceNo || '';
+    // Only use Excel invoice number, no backend fallback
+    const exactInvoiceNo = (invoiceData as any)?.["In_no"] || '';
     
     const { createRoot } = await import('react-dom/client');
     let hiddenDiv = document.createElement('div');
@@ -438,7 +465,7 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
   };
 
   return (
-    <div className="min-h-screen h-screen bg-gradient-to-br from-gray-50 to-orange-50 overflow-hidden flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-orange-50 flex flex-col">
       {/* Top Bar */}
       <div className="flex items-center justify-between px-8 py-0 bg-gradient-to-r from-orange-500 via-orange-400 to-orange-600 shadow-md border-b" style={{ height: 72 }}>
         <div className="flex items-center h-full">
@@ -457,202 +484,219 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="w-full max-w-[1600px] mx-auto px-2 py-10 flex-1 flex flex-col">
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-extrabold text-gray-900 mb-1 tracking-tight">Hello User</h1>
-            <p className="text-gray-500 text-lg">View and manage your invoices below.</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <Link href="/create-invoice">
-              <button className="bg-orange-600 hover:bg-orange-700 text-white font-bold px-7 py-3 rounded-lg transition shadow-lg border border-orange-200 text-lg">
-                Create Invoice
-              </button>
-            </Link>
-            <Link href="/reports">
-              <button className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-7 py-3 rounded-lg transition shadow-lg border border-blue-200 text-lg">
-                Reports
-              </button>
-            </Link>
-          </div>
-        </div>
-
-        {/* Search Bar + Filter Button */}
-        <div className="mb-6 flex items-center gap-4">
-          <input
-            type="text"
-            placeholder="Search invoices"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full px-5 py-3 rounded-xl border border-orange-200 focus:outline-none focus:ring-2 focus:ring-orange-400 text-lg bg-white shadow-sm placeholder-gray-400 text-gray-800 font-medium"
-          />
-          <div className="relative filter-dropdown">
-            <button
-              className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold px-5 py-3 rounded-xl shadow transition text-base"
-              onClick={() => setShowFilter(v => !v)}
-              type="button"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707l-6.414 6.414A1 1 0 0013 13.414V19a1 1 0 01-1.447.894l-2-1A1 1 0 019 18v-4.586a1 1 0 00-.293-.707L2.293 6.707A1 1 0 012 6V4z" /></svg>
-              {filter}
-            </button>
-            {showFilter && (
-              <div className="absolute right-0 mt-2 w-36 bg-white border border-orange-200 rounded-lg shadow-lg z-50">
-                {['Show All', 'Daily', 'Weekly', 'Monthly'].map(option => (
-                  <button
-                    key={option}
-                    className={`block w-full text-left px-4 py-2 text-gray-700 hover:bg-orange-50 ${filter === option ? 'font-bold text-orange-600' : ''}`}
-                    onClick={() => { setFilter(option); setShowFilter(false); }}
-                  >
-                    {option}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Backend Error Message */}
-        {backendError && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
-              <span className="text-red-700 font-medium">{backendError}</span>
+      {/* Main Content - Flex-1 to push footer down */}
+      <div className="flex-1 flex flex-col">
+        <div className="w-full max-w-[1600px] mx-auto px-2 py-10 pb-20 flex-1 flex flex-col">
+          <div className="mb-8 flex items-center justify-between">
+            <div>
+              <h1 className="text-4xl font-extrabold text-gray-900 mb-1 tracking-tight">Hello User</h1>
+              <p className="text-gray-500 text-lg">View and manage your invoices below.</p>
             </div>
-            <p className="text-red-600 text-sm mt-1">
-              You can still create new invoices using the "Create Invoice" button above.
-            </p>
+            <div className="flex items-center gap-4">
+              <Link href="/create-invoice">
+                <button className="bg-orange-600 hover:bg-orange-700 text-white font-bold px-7 py-3 rounded-lg transition shadow-lg border border-orange-200 text-lg">
+                  Create Invoice
+                </button>
+              </Link>
+              <Link href="/reports">
+                <button className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-7 py-3 rounded-lg transition shadow-lg border border-blue-200 text-lg">
+                  Reports
+                </button>
+              </Link>
+            </div>
           </div>
-        )}
 
-        {/* Filter Status */}
-        {(search || filter !== 'Show All') && (
-          <div className="mb-4 flex items-center gap-2 text-sm text-gray-600">
-            <span>Showing {filteredInvoices.length}</span>
-            {search && <span>• Search: "{search}"</span>}
-            {filter !== 'Show All' && <span>• Filter: {filter}</span>}
-            <button
-              onClick={() => { setSearch(''); setFilter('Show All'); }}
-              className="text-orange-600 hover:text-orange-700 underline"
-            >
-              Clear filters
-            </button>
+          {/* Search Bar + Filter Button */}
+          <div className="mb-6 flex items-center gap-4">
+            <input
+              type="text"
+              placeholder="Search invoices"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full px-5 py-3 rounded-xl border border-orange-200 focus:outline-none focus:ring-2 focus:ring-orange-400 text-lg bg-white shadow-sm placeholder-gray-400 text-gray-800 font-medium"
+            />
+            <div className="relative filter-dropdown">
+              <button
+                className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold px-5 py-3 rounded-xl shadow transition text-base"
+                onClick={() => setShowFilter(v => !v)}
+                type="button"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707l-6.414 6.414A1 1 0 0013 13.414V19a1 1 0 01-1.447.894l-2-1A1 1 0 019 18v-4.586a1 1 0 00-.293-.707L2.293 6.707A1 1 0 012 6V4z" /></svg>
+                {filter}
+              </button>
+              {showFilter && (
+                <div className="absolute right-0 mt-2 w-36 bg-white border border-orange-200 rounded-lg shadow-lg z-50">
+                  {['Show All', 'Daily', 'Weekly', 'Monthly'].map(option => (
+                    <button
+                      key={option}
+                      className={`block w-full text-left px-4 py-2 text-gray-700 hover:bg-orange-50 ${filter === option ? 'font-bold text-orange-600' : ''}`}
+                      onClick={() => { setFilter(option); setShowFilter(false); }}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        )}
 
-        {/* Table with only vertical scroll, full width, sticky header */}
-        <div className="bg-white rounded-2xl shadow-2xl border border-orange-100 w-full overflow-hidden flex-1 flex flex-col">
-          <div className="overflow-y-auto flex-1">
-            <table className="w-full text-left text-lg whitespace-nowrap table-fixed" style={{ tableLayout: 'fixed', width: '100%' }}>
-              <colgroup>
-                <col style={{ width: '6%' }} />
-                <col style={{ width: '13%' }} />
-                <col style={{ width: '15%' }} />
-                <col style={{ width: '15%' }} />
-                <col style={{ width: '13%' }} />
-                <col style={{ width: '13%' }} />
-                <col style={{ width: '13%' }} />
-                <col style={{ width: '12%' }} />
-              </colgroup>
-              <thead className="bg-orange-50 sticky top-0 z-10">
-                <tr className="border-b-2 border-orange-200">
-                  <th className="px-2 py-4 text-gray-700 font-semibold">SR.</th>
-                  <th className="px-2 py-4 text-gray-700 font-semibold">Invoice No.</th>
-                  <th className="px-2 py-4 text-gray-700 font-semibold">Client Name</th>
-                  <th className="px-2 py-4 text-gray-700 font-semibold">Property</th>
-                  <th className="px-2 py-4 text-gray-700 font-semibold">Centre</th>
-                  <th className="px-2 py-4 text-gray-700 font-semibold">Circuit</th>
-                  <th className="px-2 py-4 text-gray-700 font-semibold">Invoice Date</th>
-                  <th className="px-2 py-4 text-gray-700 font-semibold">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredInvoices.map((inv, idx) => {
-                  if (!inv) return null;
-                  return (
-                    <tr key={inv._id || idx} className="border-b border-orange-100 hover:bg-orange-50 transition-colors">
-                      <td className="px-2 py-4 text-gray-700 font-semibold">{idx + 1}</td>
-                      <td className="px-2 py-4 text-gray-700 font-semibold">{(inv.data as any)?.invoiceNo || inv.invoiceNo || ''}</td>
-                      <td className="px-2 py-4 text-gray-700 font-semibold truncate" title={inv.data?.clientName || inv.clientName || ''}>
-                        {inv.data?.clientName || inv.clientName}
-                      </td>
-                      <td className="px-2 py-4 text-gray-700 font-semibold truncate" title={inv.data?.property || inv.property || ''}>
-                        {inv.data?.property || inv.property || '-'}
-                      </td>
-                      <td className="px-2 py-4 text-gray-700 font-semibold truncate" title={inv.data?.centre || ''}>
-                        {inv.data?.centre || '-'}
-                      </td>
-                      <td className="px-2 py-4 text-gray-700 font-semibold truncate" title={inv.data?.businessTerritory || inv.businessTerritory || ''}>
-                        {inv.data?.businessTerritory || inv.businessTerritory || '-'}
-                      </td>
-                      <td className="px-2 py-4 text-gray-600 font-semibold">{inv.data?.invoiceDate || inv.invoiceDate}</td>
-                      <td className="px-2 py-4">
-                        <div className="relative actions-dropdown">
-                          <button
-                            className="text-gray-700 hover:text-orange-600 transition p-1"
-                            onClick={() => setSelectedInvoice(inv)}
-                            title="Actions"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-6 h-6">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z" />
-                            </svg>
-                          </button>
-                          {selectedInvoice?._id === inv._id && (
-                            <div className="absolute right-0 mt-2 w-48 bg-white border border-orange-200 rounded-lg shadow-lg z-50">
-                              <button
-                                className="w-full text-left px-4 py-2 text-gray-700 hover:bg-orange-50 flex items-center gap-2"
-                                onClick={() => { 
-                                  setSelectedInvoice(inv); 
-                                  setShowPreview(true); 
-                                }}
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                </svg>
-                                View
-                              </button>
-                              <button
-                                className="w-full text-left px-4 py-2 text-gray-700 hover:bg-orange-50 flex items-center gap-2"
-                                onClick={() => { setEditInvoice(inv); setShowEdit(true); }}
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                </svg>
-                                Edit
-                              </button>
-                              <button
-                                className="w-full text-left px-4 py-2 text-gray-700 hover:bg-orange-50 flex items-center gap-2"
-                                onClick={() => handleDownloadPDF(inv)}
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                                Download
-                              </button>
-                              <button
-                                className="w-full text-left px-4 py-2 text-red-600 hover:bg-red-50 flex items-center gap-2"
-                                onClick={() => handleDelete(inv)}
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                                Delete
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          {/* Backend Error Message */}
+          {backendError && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+                <span className="text-red-700 font-medium">{backendError}</span>
+              </div>
+              <p className="text-red-600 text-sm mt-1">
+                You can still create new invoices using the "Create Invoice" button above.
+              </p>
+            </div>
+          )}
+
+          {/* Filter Status */}
+          {(search || filter !== 'Show All') && (
+            <div className="mb-4 flex items-center gap-2 text-sm text-gray-600">
+              <span>Showing {filteredInvoices.length}</span>
+              {search && <span>• Search: "{search}"</span>}
+              {filter !== 'Show All' && <span>• Filter: {filter}</span>}
+              <button
+                onClick={() => { setSearch(''); setFilter('Show All'); }}
+                className="text-orange-600 hover:text-orange-700 underline"
+              >
+                Clear filters
+              </button>
+            </div>
+          )}
+
+          {/* Table with vertical scrollbar, full width, sticky header */}
+          <div className="bg-white rounded-2xl shadow-2xl border border-orange-100 w-full overflow-hidden flex-1 flex flex-col">
+            <div className="overflow-y-auto flex-1" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+              <table className="w-full text-left text-lg whitespace-nowrap table-fixed" style={{ tableLayout: 'fixed', width: '100%' }}>
+                <colgroup>
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '13%' }} />
+                  <col style={{ width: '15%' }} />
+                  <col style={{ width: '15%' }} />
+                  <col style={{ width: '13%' }} />
+                  <col style={{ width: '13%' }} />
+                  <col style={{ width: '13%' }} />
+                  <col style={{ width: '12%' }} />
+                </colgroup>
+                <thead className="bg-orange-50 sticky top-0 z-10">
+                  <tr className="border-b-2 border-orange-200">
+                    <th className="px-2 py-4 text-gray-700 font-semibold">SR.</th>
+                    <th className="px-2 py-4 text-gray-700 font-semibold">Invoice No.</th>
+                    <th className="px-2 py-4 text-gray-700 font-semibold">Client Name</th>
+                    <th className="px-2 py-4 text-gray-700 font-semibold">Property</th>
+                    <th className="px-2 py-4 text-gray-700 font-semibold">Centre</th>
+                    <th className="px-2 py-4 text-gray-700 font-semibold">Circuit</th>
+                    <th className="px-2 py-4 text-gray-700 font-semibold">Invoice Date</th>
+                    <th className="px-2 py-4 text-gray-700 font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-orange-100">
+                  {filteredInvoices.map((inv, idx) => {
+                    if (!inv) return null;
+                    return (
+                      <tr key={inv._id || idx} className="border-b border-orange-100 hover:bg-orange-50 transition-colors">
+                        <td className="px-2 py-4 text-gray-700 font-semibold">{idx + 1}</td>
+                        <td className="px-2 py-4 text-gray-700 font-semibold">{displayInvoiceNo(inv)}</td>
+                        <td className="px-2 py-4 text-gray-700 font-semibold truncate" title={inv.data?.clientName || inv.clientName || ''}>
+                          {inv.data?.clientName || inv.clientName}
+                        </td>
+                        <td className="px-2 py-4 text-gray-700 font-semibold truncate" title={inv.data?.property || inv.property || ''}>
+                          {inv.data?.property || inv.property || '-'}
+                        </td>
+                        <td className="px-2 py-4 text-gray-700 font-semibold truncate" title={inv.data?.centre || ''}>
+                          {inv.data?.centre || '-'}
+                        </td>
+                        <td className="px-2 py-4 text-gray-700 font-semibold truncate" title={inv.data?.businessTerritory || inv.businessTerritory || ''}>
+                          {inv.data?.businessTerritory || inv.businessTerritory || '-'}
+                        </td>
+                        <td className="px-2 py-4 text-gray-600 font-semibold">{inv.data?.invoiceDate || inv.invoiceDate}</td>
+                        <td className="px-2 py-4">
+                          <div className="relative actions-dropdown">
+                            <button
+                              className="text-gray-700 hover:text-orange-600 transition p-1"
+                              onClick={() => setSelectedInvoice(inv)}
+                              title="Actions"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-6 h-6">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z" />
+                              </svg>
+                            </button>
+                            {selectedInvoice?._id === inv._id && (
+                              <div className="absolute right-0 mt-2 w-48 bg-white border border-orange-200 rounded-lg shadow-lg z-50">
+                                <button
+                                  className="w-full text-left px-4 py-2 text-gray-700 hover:bg-orange-50 flex items-center gap-2"
+                                  onClick={() => { 
+                                    setSelectedInvoice(inv); 
+                                    setShowPreview(true); 
+                                  }}
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                  </svg>
+                                  View
+                                </button>
+                                <button
+                                  className="w-full text-left px-4 py-2 text-gray-700 hover:bg-orange-50 flex items-center gap-2"
+                                  onClick={() => { setEditInvoice(inv); setShowEdit(true); }}
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                  </svg>
+                                  Edit
+                                </button>
+                                <button
+                                  className="w-full text-left px-4 py-2 text-gray-700 hover:bg-orange-50 flex items-center gap-2"
+                                  onClick={() => handleDownloadPDF(inv)}
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                  </svg>
+                                  Download
+                                </button>
+                                <button
+                                  className="w-full text-left px-4 py-2 text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                  onClick={() => handleDelete(inv)}
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                  Delete
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Footer - Fixed position over table */}
+      <footer className="fixed bottom-0 left-0 right-0 bg-gradient-to-r from-orange-500 via-orange-400 to-orange-600 text-white py-4 text-center shadow-md z-40">
+        <div className="text-center text-white text-sm py-2">
+          Powered by{' '}
+          <a 
+            href="https://highflyersinfotech.com/" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-white hover:text-orange-100 underline font-medium"
+          >
+            Highflyers Infotech
+          </a>
+        </div>
+      </footer>
 
       {/* Invoice Preview Modal */}
       {showPreview && selectedInvoice && (
@@ -700,23 +744,6 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
           </div>
         </div>
       )}
-
-      {/* Footer */}
-      <footer className="bg-gradient-to-r from-orange-500 via-orange-400 to-orange-600 text-white py-4 mt-auto">
-        <div className="text-center">
-          <p className="text-sm font-medium">
-            Powered by{' '}
-            <a 
-              href="https://highflyersinfotech.com/" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="text-white hover:text-orange-200 underline transition-colors duration-200"
-            >
-              HighFlyers Infotech
-            </a>
-          </p>
-        </div>
-      </footer>
     </div>
   );
 };

@@ -376,7 +376,7 @@ const ReportsPage = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Movie Name</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Movie Name (Optional)</label>
                 <select
                   value={selectedMovie}
                   onChange={(e) => setSelectedMovie(e.target.value)}
@@ -513,9 +513,9 @@ const ReportsPage = () => {
               <tbody className="bg-white divide-y divide-orange-100">
                 {invoices.slice(0, 10).map((inv, idx) => (
                   <tr key={inv._id} className="hover:bg-orange-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {inv.invoiceId}
-                    </td>
+                    <td className="px-4 py-2 text-sm text-gray-900">
+                          {inv.data?.["In_no"] || 'No "In_no" Found'}
+                        </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {inv.data?.clientName || inv.clientName}
                     </td>
@@ -537,23 +537,6 @@ const ReportsPage = () => {
           </div>
         </div>
       </div>
-
-      {/* Footer */}
-      <footer className="bg-gradient-to-r from-orange-500 via-orange-400 to-orange-600 text-white py-4 mt-auto">
-        <div className="text-center">
-          <p className="text-sm font-medium">
-            Powered by{' '}
-            <a 
-              href="https://highflyersinfotech.com/" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="text-white hover:text-orange-200 underline transition-colors duration-200"
-            >
-              HighFlyers Infotech
-            </a>
-          </p>
-        </div>
-      </footer>
     </div>
   );
 };

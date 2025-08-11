@@ -79,7 +79,8 @@ interface InvoiceData {
   placeOfService?: string;
   businessTerritory?: string;
   invoiceNo?: string;
-  invoiceId?: string; // Added for invoiceId
+  "Invoice No"?: string; // Add Excel column name
+  "In_no"?: string; // Add Excel "In_no" column name
   invoiceDate?: string;
   movieName?: string;
   movieVersion?: string;
@@ -90,6 +91,8 @@ interface InvoiceData {
   cinemaWeek?: string;
   screeningFrom?: string;
   screeningTo?: string;
+  screeningDateFrom?: string;
+  screeningDateTo?: string;
   hsnSacCode?: string;
   description?: string;
   distributionPercent?: string;
@@ -119,65 +122,76 @@ interface InvoiceData {
   totalAud?: string | number;
   totalCollection?: string | number;
   otherDeduction?: string | number;
+  gstType?: 'CGST/SGST' | 'IGST'; // Added for GST/IGST selector
+  share?: string | number; // Added for distribution percent
 }
 
 // Example structure for invoice data (expand as needed)
-const defaultInvoice = {
-  clientName: "MIRAJ ENTERTAINMENT LIMITED",
-  clientAddress: "3RD, 2 ACME PLAZA, KURLA ROAD, OPP SANGAM BLDG CINEMA\nANDHERI EAST, MUMBAI, MAHARASHTRA, 400059",
-  panNo: "AAFCM5147R",
-  gstinNo: "27AAFCM5147R1ZP",
-  property: "Miraj Cinemas Dattani",
-  centre: "MUMBAI",
-  placeOfService: "MAHARASHTRA",
-  businessTerritory: "MUMBAI",
-  invoiceNo: "",
-  invoiceId: "",
-  invoiceDate: "2025-06-23",
-  movieName: "NARIVETTA",
-  movieVersion: "2D",
-  language: "MALAYALAM",
-  screenFormat: "1",
-  week: "1",
-  cinemaWeek: "1",
-  screeningFrom: "23/05/2025",
-  screeningTo: "29/05/2025",
-  hsnSacCode: "997332",
-  description: "Theatrical Exhibition Rights",
-  distributionPercent: 45,
-  table: [
-    { date: "23/05/2025", show: 1, aud: 10, collection: 1542.39, deduction: "", deductionAmt: 0 },
-    { date: "24/05/2025", show: 1, aud: 2, collection: 389.82, deduction: "", deductionAmt: 0 },
-  ],
-  showTax: 1200,
-  otherDeduction: 120,
-  totalShow: 7,
-  totalAud: 20,
-  totalCollection: 4175.11,
-  cgstRate: 9,
-  sgstRate: 9,
-  taxType: "GST",
-  gstRate: 18,
-  remark: "",
+const defaultInvoice: InvoiceData = {
+  clientName: '',
+  clientAddress: '',
+  panNo: '',
+  gstinNo: '',
+  property: '',
+  placeOfService: '',
+  businessTerritory: '',
+  invoiceNo: '', // This will be filled from Excel "In_no"
+  "Invoice No": '', // Excel column name
+  "In_no": '', // Excel "In_no" column name - THIS IS THE ONLY FIELD WE USE
+  invoiceDate: '',
+  movieName: '',
+  movieVersion: '',
+  language: '',
+  screenFormat: '',
+  reels: '',
+  week: '',
+  cinemaWeek: '',
+  screeningFrom: '',
+  screeningTo: '',
+  screeningDateFrom: '',
+  screeningDateTo: '',
+  hsnSacCode: '',
+  description: '',
+  distributionPercent: '',
+  table: [],
+  showTax: '',
+  totalTaxableAmount: '',
+  cgst: '',
+  sgst: '',
+  netAmount: '',
+  amountWords: '',
+  remark: '',
   terms: [],
-  signatory: "For FIRST FILM STUDIOS LLP",
-  regNo: "ACH-2259",
-  firmName: "FIRST FILM STUDIOS LLP",
-  address: "26-104, RIDDHI SIDHI, CHS, CSR COMPLEX, OLD MHADA, KANDIVALI WEST, MUMBAI - 400067, MAHARASHTRA",
-  gst: "27AAJFF7915J1Z1",
-  pan: "AAJFF7915J",
-  email: "info@firstfilmstudios.com",
+  signatory: '',
+  regNo: '',
+  firmName: '',
+  address: '',
+  gst: '',
+  pan: '',
+  email: '',
+  particulars: [],
+  centre: '',
+  cgstRate: '',
+  sgstRate: '',
+  taxType: 'GST',
+  gstRate: '',
+  totalShow: '',
+  totalAud: '',
+  totalCollection: '',
+  otherDeduction: '',
+  gstType: 'CGST/SGST',
+  share: ''
 };
 
 const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = true }: { data?: typeof defaultInvoice, onChange?: (invoice: any) => void, showDownloadButton?: boolean }) => {
   // Use ONLY Excel invoice number
   const mergedData = { ...defaultInvoice, ...data };
+  
   if (data?.invoiceNo) {
     mergedData.invoiceNo = data.invoiceNo;
   }
-  console.log("Edit_preview - Invoice number from Excel:", data?.invoiceNo);
-  console.log("Edit_preview - Full data:", data);
-  console.log("Edit_preview - Merged invoice number:", mergedData.invoiceNo);
+  
+  // Only use Excel invoice number, no backend fields
   const [invoice, setInvoice] = useState(mergedData);
   const previewRef = useRef<HTMLDivElement>(null);
   const hiddenPreviewRef = useRef<HTMLDivElement>(null);
@@ -196,7 +210,7 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
   // Helper to update table row
   const updateTableRow = (idx: number, key: string, value: any) => {
     setInvoice((prev) => {
-      const newTable = prev.table.map((row, i) =>
+      const newTable = (prev.table || []).map((row, i) =>
         i === idx ? { ...row, [key]: value } : row
       );
       return { ...prev, table: newTable };
@@ -250,7 +264,7 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
 
   // Generate table rows with proper date format
   const generateTableRows = (originalRows: Array<{date: string; show: number; aud: number; collection: number; deduction: string; deductionAmt: number}>): Array<{date: string; show: number; aud: number; collection: number; deduction: string; deductionAmt: number}> => {
-    const dateRange = generateDateRange(invoice.screeningFrom, invoice.screeningTo);
+    const dateRange = generateDateRange(invoice.screeningFrom || '', invoice.screeningTo || '');
     
     if (dateRange.length === 0) {
       return originalRows;

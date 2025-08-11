@@ -91,6 +91,44 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
         const pad = (n: number) => n < 10 ? '0' + n : n;
         const todayStr = `${pad(today.getDate())}/${pad(today.getMonth() + 1)}/${today.getFullYear()}`;
         
+        // Extract invoice number from Excel - Try multiple possible column names
+        let excelInvoiceNo = "";
+        
+        // Try exact matches first
+        if (row["In_no"]) excelInvoiceNo = row["In_no"];
+        else if (row["In_no "]) excelInvoiceNo = row["In_no "];
+        else if (row["In_no  "]) excelInvoiceNo = row["In_no  "];
+        // Try common variations
+        else if (row["Inv_no"]) excelInvoiceNo = row["Inv_no"];
+        else if (row["Inv No"]) excelInvoiceNo = row["Inv No"];
+        else if (row["Invoice No"]) excelInvoiceNo = row["Invoice No"];
+        else if (row["Invoice No."]) excelInvoiceNo = row["Invoice No."];
+        else if (row["Invoice Number"]) excelInvoiceNo = row["Invoice Number"];
+        // Try to find any column that might contain invoice numbers
+        else {
+          const allColumns = Object.keys(row);
+          for (const col of allColumns) {
+            const value = row[col];
+            if (value && typeof value === 'string' && value.trim()) {
+              // Check if this looks like an invoice number (contains letters and numbers)
+              const trimmedValue = value.trim();
+              if (/^[A-Za-z0-9]+$/.test(trimmedValue) && trimmedValue.length >= 2) {
+                excelInvoiceNo = trimmedValue;
+                console.log('Found invoice number in column:', col, 'with value:', trimmedValue);
+                break;
+              }
+            }
+          }
+        }
+        
+        if (!excelInvoiceNo) {
+          console.warn('No invoice number found in Excel data. Available columns:', Object.keys(row));
+          console.log('Row data:', row);
+        } else {
+          console.log('Excel invoice number found:', excelInvoiceNo);
+        }
+        
+        // Build invoice fields - Excel data for non-user fields, blank for user input fields
         const invoiceFields = {
           clientName: row["BILL TO"] || "",
           clientAddress: row["ADDRESS"] || "",
@@ -100,57 +138,20 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
           centre: row["CENTRE"] || "",
           placeOfService: row["PLACE OF SERVICE"] || "",
           businessTerritory: row["CIRCUIT"] || "",
-          invoiceNo: (() => {
-            // Now that we've cleaned column names, we can directly access the correct column
-            let excelInvoiceNo = row["Inv_no"] || row["Inv no"] || row["INV NO"] || row["Inv No"] || row["Invoice No"] || row["INVOICE NO"] || row["Invoice Number"] || row["INVOICE NUMBER"] || "";
-            
-            // If we still don't have an invoice number, try to find any column that might contain it
-            if (!excelInvoiceNo) {
-              const allColumns = Object.keys(row);
-              const invoiceRelatedColumns = allColumns.filter(col => 
-                col.toLowerCase().includes('inv') || 
-                col.toLowerCase().includes('invoice') ||
-                col.toLowerCase().includes('no') ||
-                col.toLowerCase().includes('number')
-              );
-              for (const col of invoiceRelatedColumns) {
-                if (row[col] && row[col].toString().trim()) {
-                  excelInvoiceNo = row[col].toString().trim();
-                  break;
-                }
-              }
-            }
-            
-            // Final fallback: if still no invoice number, try to find any column with a value that looks like an invoice number
-            if (!excelInvoiceNo) {
-              const allColumns = Object.keys(row);
-              for (const col of allColumns) {
-                const value = row[col];
-                if (value && typeof value === 'string' && value.trim()) {
-                  // Check if the value looks like an invoice number (contains letters and numbers)
-                  const trimmedValue = value.trim();
-                  if (/^[A-Za-z0-9]+$/.test(trimmedValue) && trimmedValue.length >= 2) {
-                    excelInvoiceNo = trimmedValue;
-                    break;
-                  }
-                }
-              }
-            }
-            
-            return excelInvoiceNo;
-          })(),
+          invoiceNo: excelInvoiceNo, // Use Excel "In_no" directly
+          "In_no": excelInvoiceNo, // Also store as "In_no" for consistency
           invoiceDate: row["Invoice Date"] || row["INVOICE DATE"] || todayStr,
-          // Manual input fields - these will be overridden by user input
-          movieName: movieName || row["Movie Name"] || row["MOVIE NAME"] || "",
-          movieVersion: movieVersion || row["Movie Version"] || row["MOVIE VERSION"] || "",
-          language: language || row["Language"] || row["LANGUAGE"] || "",
-          screenFormat: screenFormat || row["Screen Formate"] || row["SCREEN FORMATE"] || "",
-          releaseWeek: releaseWeek || row["Release Week"] || row["RELEASE WEEK"] || "",
-          cinemaWeek: cinemaWeek || row["Cinema Week"] || row["CINEMA WEEK"] || "",
-          screeningDateFrom: screeningDateFrom || row["Screening Date From"] || row["Screening Date"] || row["SCREENING DATE"] || row["Screening Start Date"] || row["SCREENING START DATE"] || row["H"] || "",
-          screeningDateTo: screeningDateTo || row["Screening Date To"] || row["Screening End Date"] || row["SCREENING END DATE"] || row["I"] || "",
-          hsnSacCode: row["HSN/SAC Code"] || row["HSN/SAC CODE"] || "",
-          description: row["Description"] || row["DESCRIPTION"] || "",
+          // User input fields - these will be filled by user on the page
+          movieName: movieName || "", // Use user input or blank
+          movieVersion: movieVersion || "", // Use user input or blank
+          language: language || "", // Use user input or blank
+          screenFormat: screenFormat || "", // Use user input or blank
+          releaseWeek: releaseWeek || "", // Use user input or blank
+          cinemaWeek: cinemaWeek || "", // Use user input or blank
+          screeningFrom: screeningDateFrom || row["Screening Date From"] || row["Screening Date"] || row["SCREENING DATE"] || row["Screening Start Date"] || row["SCREENING START DATE"] || row["H"] || "",
+          screeningTo: screeningDateTo || row["Screening Date To"] || row["Screening End Date"] || row["SCREENING END DATE"] || row["I"] || "",
+          hsnSacCode: row["HSN/SAC Code"] || row["HSN/SAC CODE"] || "997332", // Default HSN code
+          description: row["Description"] || row["DESCRIPTION"] || "Theatrical Exhibition Rights", // Default description
         };
         // Build table array for all date columns dynamically
         const table: { date: string; show: number; aud: number; collection: number; deduction: string; deductionAmt: number }[] = [];
@@ -197,13 +198,17 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
         const showTax = Number(row["SHOW TAX"]) || 0;
         const otherDeduction = Number(row["OTHERS"]) || 0;
         const finalInvoice = {
-          ...invoiceFields,
+          ...invoiceFields, // Use the new invoiceFields object
           table,
           totalShow: totalShowVal,
           totalAud: totalAudVal,
           totalCollection: totalCollectionVal,
-          showTax,
-          otherDeduction,
+          showTax: showTax,
+          otherDeduction: otherDeduction,
+          // Add user input values
+          gstType: gstType || "CGST/SGST",
+          gstRate: gstRate || 18,
+          share: share || 45
         };
         
         return finalInvoice;
@@ -272,13 +277,15 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
       {/* Manual Input Fields Section */}
       <div className="border-t pt-4">
         <h3 className="text-sm font-semibold mb-3 text-orange-600">Manual Input Fields</h3>
+        <p className="text-xs text-gray-500 mb-3">Changes update the preview in real-time as you type</p>
         
+        {/* User Input Fields - These will be blank and user will fill them */}
         <div className="space-y-3">
           <div>
             <label className="block text-xs font-semibold mb-1">Movie Name</label>
-            <input 
-              type="text" 
-              value={movieName} 
+            <input
+              type="text"
+              value={movieName}
               onChange={(e) => {
                 const value = e.target.value;
                 setMovieName(value);
@@ -289,32 +296,38 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
               }}
               className="w-full border px-2 py-1 rounded text-sm"
               placeholder="Enter movie name"
+              required
             />
           </div>
           
           <div>
             <label className="block text-xs font-semibold mb-1">Movie Version</label>
-            <input 
-              type="text" 
-              value={movieVersion} 
+            <select
+              value={movieVersion}
               onChange={(e) => {
                 const value = e.target.value;
                 setMovieVersion(value);
-                // Update preview immediately on every keystroke
+                // Update preview immediately on every change
                 const updateInvoices = invoices.map(inv => ({ ...inv, movieVersion: value }));
                 setInvoices(updateInvoices);
                 onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate })), false);
               }}
               className="w-full border px-2 py-1 rounded text-sm"
-              placeholder="Enter movie version"
-            />
+              required
+            >
+              <option value="">Select version</option>
+              <option value="2D">2D</option>
+              <option value="3D">3D</option>
+              <option value="4DX">4DX</option>
+              <option value="IMAX">IMAX</option>
+            </select>
           </div>
           
           <div>
             <label className="block text-xs font-semibold mb-1">Language</label>
-            <input 
-              type="text" 
-              value={language} 
+            <input
+              type="text"
+              value={language}
               onChange={(e) => {
                 const value = e.target.value;
                 setLanguage(value);
@@ -324,15 +337,16 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
                 onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate })), false);
               }}
               className="w-full border px-2 py-1 rounded text-sm"
-              placeholder="Enter language"
+              placeholder="e.g., Hindi, English, Tamil"
+              required
             />
           </div>
           
           <div>
             <label className="block text-xs font-semibold mb-1">Screen Format</label>
-            <input 
-              type="text" 
-              value={screenFormat} 
+            <input
+              type="text"
+              value={screenFormat}
               onChange={(e) => {
                 const value = e.target.value;
                 setScreenFormat(value);
@@ -342,15 +356,16 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
                 onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate })), false);
               }}
               className="w-full border px-2 py-1 rounded text-sm"
-              placeholder="Enter screen format"
+              placeholder="e.g., 1, 2, 3"
+              required
             />
           </div>
           
           <div>
             <label className="block text-xs font-semibold mb-1">Release Week</label>
-            <input 
-              type="text" 
-              value={releaseWeek} 
+            <input
+              type="text"
+              value={releaseWeek}
               onChange={(e) => {
                 const value = e.target.value;
                 setReleaseWeek(value);
@@ -360,15 +375,16 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
                 onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate })), false);
               }}
               className="w-full border px-2 py-1 rounded text-sm"
-              placeholder="Enter release week"
+              placeholder="e.g., 1, 2, 3"
+              required
             />
           </div>
           
           <div>
             <label className="block text-xs font-semibold mb-1">Cinema Week</label>
-            <input 
-              type="text" 
-              value={cinemaWeek} 
+            <input
+              type="text"
+              value={cinemaWeek}
               onChange={(e) => {
                 const value = e.target.value;
                 setCinemaWeek(value);
@@ -378,15 +394,16 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
                 onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate })), false);
               }}
               className="w-full border px-2 py-1 rounded text-sm"
-              placeholder="Enter cinema week"
+              placeholder="e.g., 1, 2, 3"
+              required
             />
           </div>
           
           <div>
             <label className="block text-xs font-semibold mb-1">Screening Date From</label>
-            <input 
-              type="text" 
-              value={screeningDateFrom} 
+            <input
+              type="text"
+              value={screeningDateFrom}
               onChange={(e) => {
                 const value = e.target.value;
                 setScreeningDateFrom(value);
@@ -396,15 +413,15 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
                 onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate })), false);
               }}
               className="w-full border px-2 py-1 rounded text-sm"
-              placeholder="Enter screening date from"
+              placeholder="DD/MM/YYYY"
             />
           </div>
           
           <div>
             <label className="block text-xs font-semibold mb-1">Screening Date To</label>
-            <input 
-              type="text" 
-              value={screeningDateTo} 
+            <input
+              type="text"
+              value={screeningDateTo}
               onChange={(e) => {
                 const value = e.target.value;
                 setScreeningDateTo(value);
@@ -414,7 +431,75 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
                 onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate })), false);
               }}
               className="w-full border px-2 py-1 rounded text-sm"
-              placeholder="Enter screening date to"
+              placeholder="DD/MM/YYYY"
+            />
+          </div>
+        </div>
+        
+        {/* GST and Share Settings */}
+        <div className="space-y-3 mt-4">
+          <h4 className="text-xs font-semibold text-blue-600">GST & Share Settings</h4>
+          <p className="text-xs text-gray-500 mb-2">Changes update the preview in real-time</p>
+          <div>
+            <label className="block text-xs font-semibold mb-1">GST Type</label>
+            <select
+              value={gstType}
+              onChange={(e) => {
+                const value = e.target.value as "CGST/SGST" | "IGST";
+                setGstType(value);
+                // Update preview immediately on every change
+                const updateInvoices = invoices.map(inv => ({ ...inv, gstType: value }));
+                setInvoices(updateInvoices);
+                onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType: value, gstRate })), false);
+              }}
+              className="w-full border px-2 py-1 rounded text-sm"
+              required
+            >
+              <option value="">Select GST type</option>
+              <option value="CGST/SGST">CGST/SGST</option>
+              <option value="IGST">IGST</option>
+            </select>
+          </div>
+          
+          <div>
+            <label className="block text-xs font-semibold mb-1">GST Rate (%)</label>
+            <input
+              type="number"
+              value={gstRate}
+              onChange={(e) => {
+                const value = Number(e.target.value);
+                setGstRate(value);
+                // Update preview immediately on every keystroke
+                const updateInvoices = invoices.map(inv => ({ ...inv, gstRate: value }));
+                setInvoices(updateInvoices);
+                onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate: value })), false);
+              }}
+              className="w-full border px-2 py-1 rounded text-sm"
+              placeholder="e.g., 18"
+              min="0"
+              max="100"
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-xs font-semibold mb-1">Share (%)</label>
+            <input
+              type="number"
+              value={share}
+              onChange={(e) => {
+                const value = Number(e.target.value);
+                setShare(value);
+                // Update preview immediately on every keystroke
+                const updateInvoices = invoices.map(inv => ({ ...inv, share: value }));
+                setInvoices(updateInvoices);
+                onChange && onChange(updateInvoices.map(inv => ({ ...inv, share: value, gstType, gstRate })), false);
+              }}
+              className="w-full border px-2 py-1 rounded text-sm"
+              placeholder="e.g., 45"
+              min="0"
+              max="100"
+              required
             />
           </div>
         </div>
