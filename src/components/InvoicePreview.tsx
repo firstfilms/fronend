@@ -534,8 +534,8 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
                       {tableRows.map((row, index) => (
                           <div key={index} style={{ display: 'flex' }}>
                               <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '25%', borderRight: '1px solid black', borderBottom: '0' }}>{formatDate(row.date)}</div>
-                              <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '10%', borderRight: '1px solid black', borderBottom: '0' }}>{row.show || ''}</div>
-                              <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '10%', borderBottom: '0' }}>{row.aud || ''}</div>
+                              <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '10%', borderRight: '1px solid black', borderBottom: '0' }}>{row.show !== undefined && row.show !== null ? row.show : ''}</div>
+                              <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '10%', borderBottom: '0' }}>{row.aud !== undefined && row.aud !== null ? row.aud : ''}</div>
                               <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '20%', borderRight: '1px solid black', borderBottom: '0' }}>
                                   {(row.collection || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </div>

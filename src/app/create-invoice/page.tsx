@@ -134,15 +134,54 @@ export default function CreateInvoicePage() {
       }
       
       // After upload, fetch the latest invoices from backend
+      const uploadResponse = await res.json();
+      console.log('Upload response:', uploadResponse);
+      
+      // Check if upload was successful and contains invoiceIds
+      if (!uploadResponse.invoiceIds || !Array.isArray(uploadResponse.invoiceIds)) {
+        console.warn('Upload response missing invoiceIds:', uploadResponse);
+        // Still mark as uploaded but show warning
+        setHasUploaded(true);
+        setShowPreview(true);
+        setPreviewSource('frontend');
+        return;
+      }
+      
       const fetchRes = await fetch('/api/proxy');
       if (fetchRes.ok) {
         const backendAll = await fetchRes.json();
-        const { invoiceIds } = await res.json();
+        
+        // Ensure backendAll is an array
+        if (!Array.isArray(backendAll)) {
+          console.warn('Backend response is not an array:', backendAll);
+          setHasUploaded(true);
+          setShowPreview(true);
+          setPreviewSource('frontend');
+          return;
+        }
+        
+        const { invoiceIds } = uploadResponse;
+        
+        console.log('Filtering backend invoices with invoiceIds:', invoiceIds);
+        console.log('Total backend invoices:', backendAll.length);
+        
         const newBackendInvoices = backendAll.filter((inv: { data: any }) => {
           // ONLY use Excel "In_no" field for filtering
           const excelInNo = inv.data?.["In_no"];
-          return excelInNo && invoiceIds.includes(excelInNo);
+          const shouldInclude = excelInNo && invoiceIds.includes(excelInNo);
+          console.log(`Invoice ${excelInNo}: ${shouldInclude ? 'INCLUDED' : 'EXCLUDED'}`);
+          return shouldInclude;
         });
+        
+        console.log('Filtered backend invoices:', newBackendInvoices);
+        
+        if (newBackendInvoices.length === 0) {
+          console.warn('No matching invoices found in backend');
+          setHasUploaded(true);
+          setShowPreview(true);
+          setPreviewSource('frontend');
+          return;
+        }
         
         setBackendInvoices(newBackendInvoices.map((inv: { data: any }) => ({
           ...inv.data,
@@ -151,9 +190,25 @@ export default function CreateInvoicePage() {
         setSelectedIdx(0);
         setShowPreview(true);
         setHasUploaded(true); // Mark as uploaded
+        setPreviewSource('backend');
+      } else {
+        console.error('Failed to fetch backend invoices:', fetchRes.status);
+        // Still mark as uploaded but show frontend preview
+        setHasUploaded(true);
+        setShowPreview(true);
+        setPreviewSource('frontend');
       }
     } catch (err) {
       console.error('Upload error:', err);
+      
+      // Even if upload fails, show preview with frontend data
+      console.log('Falling back to frontend preview due to upload error');
+      setHasUploaded(false);
+      setShowPreview(true);
+      setPreviewSource('frontend');
+      
+      // Show user-friendly error message
+      alert('Invoice upload failed, but you can still preview and download the invoice. Please try uploading again later.');
     }
   };
 
