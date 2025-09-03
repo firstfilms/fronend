@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import InvoicePreview from './InvoicePreview';
 import EditPreview from './Edit_preview';
+import { generateStandardizedPDF } from '../utils/pdfGenerator';
 
 const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
   const [invoices, setInvoices] = useState<any[]>([]);
@@ -270,82 +271,24 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
     try {
       const invoiceData = getInvoiceData(inv);
       const exactInvoiceNo = (invoiceData as any)?.["In_no"] || '';
-      
-      let hiddenDiv = document.createElement('div');
-      hiddenDiv.style.position = 'fixed';
-      hiddenDiv.style.left = '-9999px';
-      hiddenDiv.style.top = '0';
-      hiddenDiv.style.width = '800px';
-      hiddenDiv.style.background = '#fff';
-      hiddenDiv.style.color = '#000';
-      hiddenDiv.style.fontFamily = 'Arial, Helvetica, sans-serif';
-        
-      const styleTag = document.createElement('style');
-      styleTag.textContent = `
-          * {
-          color: #000 !important;
-          background-color: transparent !important;
-          border-color: #000 !important;
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-          }
-      `;
-      hiddenDiv.appendChild(styleTag);
-      document.body.appendChild(hiddenDiv);
-
-      // Render InvoicePreview into hiddenDiv with the exact same invoice number
-      const { createRoot } = await import('react-dom/client');
-      const reactRoot = createRoot(hiddenDiv);
-      reactRoot.render(
-          <InvoicePreview data={{ ...invoiceData, invoiceNo: exactInvoiceNo }} showDownloadButton={false} isPdfExport={true} />
-      );
-
-      await new Promise(r => setTimeout(r, 600));
-
-      // Apply vertical alignment fix just for PDF rendering
-      const tableCells = hiddenDiv.querySelectorAll('.pdf-cell-fix');
-      tableCells.forEach(cell => {
-        const htmlCell = cell as HTMLElement;
-        htmlCell.style.position = 'relative';
-        htmlCell.style.top = '-2.5px'; // Adjust this value to counteract the downward shift
-      });
-
-      await waitForImagesToLoad(hiddenDiv);
-      
-      const html2canvas = (await import('html2canvas')).default;
-      const canvas = await html2canvas(hiddenDiv, { 
-        scale: 2,
-        backgroundColor: '#ffffff',
-        useCORS: true,
-        allowTaint: true,
-      });
-        
-      const imgData = canvas.toDataURL("image/png");
-      const jsPDF = (await import('jspdf')).default;
-      const pdf = new jsPDF({ 
-          orientation: "p", 
-          unit: "pt", 
-          format: "a4",
-          compress: true
-      });
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const canvasWidth = canvas.width;
-      const canvasHeight = canvas.height;
-      const ratio = canvasWidth / canvasHeight;
-      const calculatedHeight = pdfWidth / ratio;
-
-      let finalPdfHeight = calculatedHeight;
-      if (calculatedHeight > pdfHeight) {
-          finalPdfHeight = pdfHeight;
-      }
-      
-      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, finalPdfHeight, undefined, 'FAST');
       const filename = exactInvoiceNo === '-' ? `Invoice_${Date.now()}.pdf` : `Invoice_${exactInvoiceNo}.pdf`;
-      pdf.save(filename);
-
-      reactRoot.unmount();
-      document.body.removeChild(hiddenDiv);
+      
+      const { data } = await generateStandardizedPDF(
+        <InvoicePreview data={{ ...invoiceData, invoiceNo: exactInvoiceNo }} showDownloadButton={false} isPdfExport={true} />,
+        filename
+      );
+      
+      // Create blob and download
+      const blob = new Blob([data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
     } catch (error) {
       console.error('PDF generation error:', error);
       alert('Error generating PDF. Please try again.');

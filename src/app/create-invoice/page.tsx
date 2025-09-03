@@ -2,9 +2,7 @@
 import React, { useState } from "react";
 import InvoiceForm from "../../components/InvoiceForm";
 import InvoicePreview from "../../components/InvoicePreview";
-import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
-import { createRoot } from 'react-dom/client';
+import { generateStandardizedPDF } from "../../utils/pdfGenerator";
 import JSZip from 'jszip';
 
 export default function CreateInvoicePage() {
@@ -258,7 +256,13 @@ export default function CreateInvoicePage() {
   // Download a single invoice as PDF
   const handleDownloadInvoice = async (inv: any, idx: number) => {
     try {
-      const { filename, data } = await generatePDFForZip(inv, idx);
+      const invoiceNo = inv["In_no"] || inv.invoiceNo || '';
+      const filename = invoiceNo ? `Invoice_${invoiceNo}.pdf` : `Invoice_${Date.now()}_${idx}.pdf`;
+      
+      const { data } = await generateStandardizedPDF(
+        <InvoicePreview data={inv} showDownloadButton={false} isPdfExport={true} />,
+        filename
+      );
       
       // Create blob and download
       const blob = new Blob([data], { type: 'application/pdf' });
@@ -279,242 +283,19 @@ export default function CreateInvoicePage() {
   };
 
   // Download all selected invoices
-  // Function to generate PDF for ZIP (optimized for size)
+  // Function to generate PDF for ZIP using standardized generator
   const generatePDFForZip = async (invoice: any, index: number): Promise<{ filename: string, data: Uint8Array }> => {
     try {
-      // Create a hidden div for InvoicePreview
-    let hiddenDiv = document.createElement('div');
-    hiddenDiv.style.position = 'fixed';
-    hiddenDiv.style.left = '-9999px';
-    hiddenDiv.style.top = '0';
-    hiddenDiv.style.width = '800px';
-    hiddenDiv.style.background = '#fff';
-      hiddenDiv.style.color = '#000';
-      hiddenDiv.style.fontFamily = 'Arial, Helvetica, sans-serif';
+      const invoiceNo = invoice["In_no"] || invoice.invoiceNo || '';
+      const filename = invoiceNo ? `Invoice_${invoiceNo}.pdf` : `Invoice_${Date.now()}_${index}.pdf`;
       
-      // Add optimized style tag for minimum file size
-      const styleTag = document.createElement('style');
-      styleTag.textContent = `
-        * {
-          color: #000 !important;
-          background-color: #fff !important;
-          border-color: #000 !important;
-        }
-        .bg-orange-600 { background-color: #ea580c !important; }
-        .bg-blue-600 { background-color: #2563eb !important; }
-        .text-white { color: #fff !important; }
-        .text-black { color: #000 !important; }
-        .border-black { border-color: #000 !important; }
-        
-                  /* Preserve stamp size in PDF - prevent any distortion */
-          img[src*="Stamp_mum.png"] {
-            width: 144px !important; /* 120px + 20% = 144px */
-            height: 120px !important;
-            object-fit: contain !important;
-            min-width: 144px !important;
-            max-width: 144px !important;
-            min-height: 120px !important;
-            max-height: 120px !important;
-            aspect-ratio: 1.2/1 !important; /* 20% wider */
-            transform: none !important;
-            scale: 1 !important;
-            flex-shrink: 0 !important;
-            flex-grow: 0 !important;
-            box-sizing: border-box !important;
-            display: block !important;
-            position: static !important;
-          }
-        
-                  /* Prevent any flex container from compressing the stamp */
-          div:has(img[src*="Stamp_mum.png"]) {
-            width: 144px !important; /* 120px + 20% = 144px */
-            height: 120px !important;
-            flex-shrink: 0 !important;
-            flex-grow: 0 !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            min-width: 144px !important;
-            max-width: 144px !important;
-            min-height: 120px !important;
-            max-height: 120px !important;
-          }
-        
-        /* Prevent parent containers from affecting stamp */
-        div:has(div:has(img[src*="Stamp_mum.png"])) {
-          flex-shrink: 0 !important;
-          min-width: fit-content !important;
-        }
-        
-        /* Fix terms and conditions positioning */
-        .w-full[style*="fontSize: 13"] {
-          position: relative !important;
-          margin-top: 16px !important;
-          page-break-inside: avoid !important;
-          break-inside: avoid !important;
-          position: static !important;
-          transform: none !important;
-        }
-        
-        /* Ensure terms content stays in position */
-        .p-2[style*="position: relative"] {
-          position: relative !important;
-          margin: 0 !important;
-          padding: 8px 16px !important;
-          position: static !important;
-          transform: none !important;
-        }
-        
-        /* Prevent any layout shifts in terms section */
-        ol[style*="margin: 0"] {
-          margin: 0 !important;
-          padding: 0 !important;
-          position: relative !important;
-        }
-        
-        li[style*="marginBottom: '8px'"] {
-          margin-bottom: 8px !important;
-          line-height: 1.4 !important;
-          position: relative !important;
-        }
-      `;
-      hiddenDiv.appendChild(styleTag);
-    document.body.appendChild(hiddenDiv);
-
-      // Render InvoicePreview into hiddenDiv
-    const reactRoot = createRoot(hiddenDiv);
-    reactRoot.render(
-        <InvoicePreview data={invoice} showDownloadButton={false} isPdfExport={true} />
+      const { data } = await generateStandardizedPDF(
+        <InvoicePreview data={invoice} showDownloadButton={false} isPdfExport={true} />,
+        filename,
+        { isZipGeneration: true }
       );
-
-      // Wait for render and images to load
-      await new Promise(r => setTimeout(r, 500)); // Reduced wait time
       
-      // Remove problematic CSS classes
-      const allElements = hiddenDiv.querySelectorAll('*');
-      allElements.forEach(element => {
-        if (element instanceof HTMLElement) {
-          const classesToRemove = Array.from(element.classList).filter(cls => 
-            cls.includes('bg-') || cls.includes('text-') || cls.includes('border-')
-          );
-          classesToRemove.forEach(cls => element.classList.remove(cls));
-        }
-      });
-      
-      // Ensure stamp maintains exact size
-      const stampElements = hiddenDiv.querySelectorAll('img[src*="Stamp_mum.png"]');
-      stampElements.forEach((stamp: Element) => {
-        if (stamp instanceof HTMLElement) {
-          stamp.style.width = '144px'; /* 120px + 20% = 144px */
-          stamp.style.height = '120px';
-          stamp.style.objectFit = 'contain';
-          stamp.style.minWidth = '144px';
-          stamp.style.maxWidth = '144px';
-          stamp.style.minHeight = '120px';
-          stamp.style.maxHeight = '120px';
-          stamp.style.aspectRatio = '1.2/1'; /* 20% wider */
-          stamp.style.transform = 'none';
-          stamp.style.scale = '1';
-          stamp.style.flexShrink = '0';
-          stamp.style.flexGrow = '0';
-          stamp.style.boxSizing = 'border-box';
-          
-          const container = stamp.parentElement;
-          if (container) {
-            container.style.width = '144px'; /* 120px + 20% = 144px */
-            container.style.height = '120px';
-            container.style.flexShrink = '0';
-            container.style.flexGrow = '0';
-            container.style.display = 'flex';
-            container.style.alignItems = 'center';
-            container.style.justifyContent = 'center';
-            container.style.minWidth = '144px';
-            container.style.maxWidth = '144px';
-            container.style.minHeight = '120px';
-            container.style.maxHeight = '120px';
-          }
-          
-          const parentContainer = container?.parentElement;
-          if (parentContainer) {
-            parentContainer.style.flexShrink = '0';
-            parentContainer.style.minWidth = 'fit-content';
-          }
-        }
-      });
-      
-      // Use html2canvas with optimized settings for minimum file size
-      const canvas = await html2canvas(hiddenDiv, { 
-        scale: 1.2, // Further reduced for ZIP files
-        backgroundColor: '#fff',
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
-        removeContainer: true,
-        imageTimeout: 3000, // Reduced timeout
-        onclone: (clonedDoc) => {
-          const clonedStamp = clonedDoc.querySelector('img[src*="Stamp_mum.png"]');
-          if (clonedStamp instanceof HTMLElement) {
-            clonedStamp.style.width = '144px'; /* 120px + 20% = 144px */
-            clonedStamp.style.height = '120px';
-            clonedStamp.style.objectFit = 'contain';
-            clonedStamp.style.aspectRatio = '1.2/1'; /* 20% wider */
-            clonedStamp.style.transform = 'none';
-            clonedStamp.style.scale = '1';
-            clonedStamp.style.flexShrink = '0';
-            clonedStamp.style.flexGrow = '0';
-          }
-        },
-        ignoreElements: (element) => {
-          const style = window.getComputedStyle(element);
-          return style.color.includes('oklch') || 
-                 style.backgroundColor.includes('oklch') ||
-                 style.borderColor.includes('oklch');
-        }
-      });
-      
-      // Optimize image data for minimum size
-      const imgData = canvas.toDataURL("image/jpeg", 0.7); // Lower quality for ZIP
-      const pdf = new jsPDF({ 
-        orientation: "p", 
-        unit: "pt", 
-        format: "a4",
-        compress: true
-      });
-    const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-    const imgWidth = canvas.width;
-    const imgHeight = canvas.height;
-      
-      // Calculate dimensions to fit content properly with margins
-      const pdfWidth = Math.min(600, pageWidth - 80); // Smaller width with more margin for ZIP
-    const pdfHeight = (imgHeight * pdfWidth) / imgWidth;
-      
-      // Check if content fits on one page, if not, scale it down
-      let finalPdfWidth = pdfWidth;
-      let finalPdfHeight = pdfHeight;
-      let x = (pageWidth - finalPdfWidth) / 2;
-      let y = 50; // Increased top margin
-      
-      if (pdfHeight > pageHeight - 100) {
-        // Content is too tall, scale it down to fit
-        const scale = (pageHeight - 100) / pdfHeight;
-        finalPdfHeight = pageHeight - 100;
-        finalPdfWidth = pdfWidth * scale;
-        x = (pageWidth - finalPdfWidth) / 2;
-        y = 50; // Keep top margin
-      }
-      
-      pdf.addImage(imgData, "JPEG", x, y, finalPdfWidth, finalPdfHeight, undefined, 'FAST');
-      
-      const pdfData = pdf.output('arraybuffer');
-        const invoiceNo = invoice["In_no"] || invoice.invoiceNo || '';
-        const filename = invoiceNo ? `Invoice_${invoiceNo}.pdf` : `Invoice_${Date.now()}_${index}.pdf`;
-
-      // Clean up
-    reactRoot.unmount();
-    document.body.removeChild(hiddenDiv);
-      
-      return { filename, data: new Uint8Array(pdfData) };
+      return { filename, data };
     } catch (error) {
       console.error('PDF generation error:', error);
       throw error;

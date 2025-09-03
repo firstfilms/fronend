@@ -1,7 +1,5 @@
 import React, { useRef } from "react";
-import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
-import { createRoot } from 'react-dom/client';
+import { generateStandardizedPDF } from "../utils/pdfGenerator";
 
 // Expected data structure for each cinema row (from Excel):
 // {
@@ -99,6 +97,7 @@ interface InvoiceData {
   screenFormat?: string;
   reels?: string;
   week?: string;
+  releaseWeek?: string;
   cinemaWeek?: string;
   screeningFrom?: string;
   screeningTo?: string;
@@ -177,7 +176,7 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
   const movieVersion = data?.movieVersion ?? "2D";
   const language = data?.language ?? "HINDI";
   const screenFormat = data?.screenFormat ?? "";
-  const week = data?.week ?? "1";
+  const week = data?.week ?? data?.releaseWeek ?? "1";
   const cinemaWeek = data?.cinemaWeek ?? "1";
   const screeningFrom = data?.screeningFrom ?? "01/08/2025";
   const screeningTo = data?.screeningTo ?? "07/08/2025";
@@ -283,92 +282,27 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
     });
   };
 
-  // Helper to wait for all images in a container to load
-  function waitForImagesToLoad(container: HTMLElement) {
-    const images = Array.from(container.querySelectorAll('img'));
-    return Promise.all(images.map(img => {
-      if (img.complete && img.naturalHeight !== 0) return Promise.resolve();
-      return new Promise(res => {
-        img.onload = img.onerror = res;
-      });
-    }));
-  }
-
-  // PDF Export using html2canvas for pixel-perfect match
+  // PDF Export using standardized PDF generator
   const handleDownloadPDF = async () => {
     try {
-    let hiddenDiv = document.createElement('div');
-    hiddenDiv.style.position = 'fixed';
-    hiddenDiv.style.left = '-9999px';
-    hiddenDiv.style.top = '0';
-    hiddenDiv.style.width = '800px';
-    hiddenDiv.style.background = '#fff';
-    hiddenDiv.style.color = '#000';
-    hiddenDiv.style.fontFamily = 'Arial, Helvetica, sans-serif';
+      const filename = displayInvoiceNo === '-' ? `Invoice_${Date.now()}.pdf` : `Invoice_${displayInvoiceNo}.pdf`;
       
-    const styleTag = document.createElement('style');
-    styleTag.textContent = `
-        * {
-        color: #000 !important;
-        background-color: transparent !important;
-        border-color: #000 !important;
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-        }
-    `;
-    hiddenDiv.appendChild(styleTag);
-    document.body.appendChild(hiddenDiv);
-
-    // Render InvoicePreview into hiddenDiv with the exact same invoice number
-    const reactRoot = createRoot(hiddenDiv);
-    reactRoot.render(
-        <InvoicePreview data={{ ...data, invoiceNo: displayInvoiceNo }} showDownloadButton={false} isPdfExport={true} />
-    );
-
-    await new Promise(r => setTimeout(r, 600));
-
-    // Apply vertical alignment fix just for PDF rendering
-    const tableCells = hiddenDiv.querySelectorAll('.pdf-cell-fix');
-    tableCells.forEach(cell => {
-      const htmlCell = cell as HTMLElement;
-      htmlCell.style.position = 'relative';
-      htmlCell.style.top = '-2.5px'; // Adjust this value to counteract the downward shift
-    });
-
-    await waitForImagesToLoad(hiddenDiv);
-    
-    const canvas = await html2canvas(hiddenDiv, { 
-    scale: 2,
-    backgroundColor: '#ffffff',
-    useCORS: true,
-    allowTaint: true,
-    });
+      const { data: pdfData } = await generateStandardizedPDF(
+        <InvoicePreview data={{ ...data, invoiceNo: displayInvoiceNo }} showDownloadButton={false} isPdfExport={true} />,
+        filename
+      );
       
-    const imgData = canvas.toDataURL("image/png");
-    const pdf = new jsPDF({ 
-        orientation: "p", 
-        unit: "pt", 
-        format: "a4",
-        compress: true
-    });
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = pdf.internal.pageSize.getHeight();
-    const canvasWidth = canvas.width;
-    const canvasHeight = canvas.height;
-    const ratio = canvasWidth / canvasHeight;
-    const calculatedHeight = pdfWidth / ratio;
-
-    let finalPdfHeight = calculatedHeight;
-    if (calculatedHeight > pdfHeight) {
-        finalPdfHeight = pdfHeight;
-    }
-    
-    pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, finalPdfHeight, undefined, 'FAST');
-    const filename = displayInvoiceNo === '-' ? `Invoice_${Date.now()}.pdf` : `Invoice_${displayInvoiceNo}.pdf`;
-    pdf.save(filename);
-
-    reactRoot.unmount();
-    document.body.removeChild(hiddenDiv);
+      // Create blob and download
+      const blob = new Blob([pdfData], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
     } catch (error) {
       console.error('PDF generation error:', error);
       alert('Error generating PDF. Please try again.');
@@ -409,7 +343,7 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
     netAmountVal = +(taxableAmount + cgstVal + sgstVal).toFixed(2);
   }
 
-  const amountInWords = "Elleven Thousand Nine Hundred Sixty Eight Rupees and Ninety Five Paise only";
+  const amountInWords = amountToWordsWithPaise(netAmountVal);
 
   const rowHeight = 22;
   const baseCellStyle = {
