@@ -10,8 +10,11 @@ interface InvoiceRow {
 }
 
 interface InvoiceFormProps {
-  onChange?: (invoices: InvoiceRow[], isNewUpload?: boolean) => void;
+  onChange?: (invoices: InvoiceRow[], isNewUpload?: boolean, bannerImage?: string, signatureImage?: string, stampImage?: string) => void;
   onPreview?: () => void;
+  onBannerImageChange?: (bannerImage: string) => void;
+  onSignatureImageChange?: (signatureImage: string) => void;
+  onStampImageChange?: (stampImage: string) => void;
 }
 
 const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
@@ -21,6 +24,9 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
   const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
   const [error, setError] = useState<string>("");
   const [selectedFileName, setSelectedFileName] = useState<string>("");
+  const [bannerImage, setBannerImage] = useState<string>(""); // Banner image as base64 or blob URL
+  const [signatureImage, setSignatureImage] = useState<string>(""); // Signature image as base64 or blob URL
+  const [stampImage, setStampImage] = useState<string>(""); // Stamp image as base64 or blob URL
   
   // Manual input fields
   const [movieName, setMovieName] = useState<string>("");
@@ -32,27 +38,144 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
   const [screeningDateFrom, setScreeningDateFrom] = useState<string>("");
   const [screeningDateTo, setScreeningDateTo] = useState<string>("");
 
+  // Helper function to upload image to Cloudinary
+  const uploadImageToCloudinary = async (file: File, imageType: 'banner' | 'signature' | 'stamp'): Promise<string> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('imageType', imageType);
+
+    const response = await fetch('/api/upload-image', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to upload image');
+    }
+
+    const data = await response.json();
+    return data.url; // Return Cloudinary URL
+  };
+
+  // Handle banner image upload
+  const handleBannerImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Check if it's an image
+    if (!file.type.startsWith('image/')) {
+      setError('Please upload an image file');
+      return;
+    }
+    
+    try {
+      setError(''); // Clear previous errors
+      // Show temporary preview while uploading
+      const tempPreview = URL.createObjectURL(file);
+      setBannerImage(tempPreview);
+      
+      // Upload to Cloudinary
+      const cloudinaryUrl = await uploadImageToCloudinary(file, 'banner');
+      
+      // Update with Cloudinary URL
+      setBannerImage(cloudinaryUrl);
+      onBannerImageChange && onBannerImageChange(cloudinaryUrl);
+      onChange && onChange(invoices.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage: cloudinaryUrl, signatureImage, stampImage })), false, cloudinaryUrl, signatureImage, stampImage);
+      
+      // Clean up temporary preview
+      URL.revokeObjectURL(tempPreview);
+    } catch (error: any) {
+      setError(error.message || 'Error uploading banner image');
+      setBannerImage('');
+    }
+  };
+
+  // Handle signature image upload
+  const handleSignatureImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (!file.type.startsWith('image/')) {
+      setError('Please upload an image file');
+      return;
+    }
+    
+    try {
+      setError(''); // Clear previous errors
+      // Show temporary preview while uploading
+      const tempPreview = URL.createObjectURL(file);
+      setSignatureImage(tempPreview);
+      
+      // Upload to Cloudinary
+      const cloudinaryUrl = await uploadImageToCloudinary(file, 'signature');
+      
+      // Update with Cloudinary URL
+      setSignatureImage(cloudinaryUrl);
+      onSignatureImageChange && onSignatureImageChange(cloudinaryUrl);
+      onChange && onChange(invoices.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, signatureImage: cloudinaryUrl, stampImage })), false, bannerImage, cloudinaryUrl, stampImage);
+      
+      // Clean up temporary preview
+      URL.revokeObjectURL(tempPreview);
+    } catch (error: any) {
+      setError(error.message || 'Error uploading signature image');
+      setSignatureImage('');
+    }
+  };
+
+  // Handle stamp image upload
+  const handleStampImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (!file.type.startsWith('image/')) {
+      setError('Please upload an image file');
+      return;
+    }
+    
+    try {
+      setError(''); // Clear previous errors
+      // Show temporary preview while uploading
+      const tempPreview = URL.createObjectURL(file);
+      setStampImage(tempPreview);
+      
+      // Upload to Cloudinary
+      const cloudinaryUrl = await uploadImageToCloudinary(file, 'stamp');
+      
+      // Update with Cloudinary URL
+      setStampImage(cloudinaryUrl);
+      onStampImageChange && onStampImageChange(cloudinaryUrl);
+      onChange && onChange(invoices.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, signatureImage, stampImage: cloudinaryUrl })), false, bannerImage, signatureImage, cloudinaryUrl);
+      
+      // Clean up temporary preview
+      URL.revokeObjectURL(tempPreview);
+    } catch (error: any) {
+      setError(error.message || 'Error uploading stamp image');
+      setStampImage('');
+    }
+  };
+
   const handleShareChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setShare(Number(e.target.value));
     // Update parent immediately
-    onChange && onChange(invoices.map(inv => ({ ...inv, share: Number(e.target.value), gstType, gstRate })), false);
+    onChange && onChange(invoices.map(inv => ({ ...inv, share: Number(e.target.value), gstType, gstRate, bannerImage, signatureImage, stampImage })), false, bannerImage, signatureImage, stampImage);
   };
   const handleGstTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setGstType(e.target.value as 'IGST' | 'CGST/SGST');
     // Update parent immediately
-    onChange && onChange(invoices.map(inv => ({ ...inv, share, gstType: e.target.value as 'IGST' | 'CGST/SGST', gstRate })), false);
+    onChange && onChange(invoices.map(inv => ({ ...inv, share, gstType: e.target.value as 'IGST' | 'CGST/SGST', gstRate, bannerImage, signatureImage, stampImage })), false, bannerImage, signatureImage, stampImage);
   };
   const handleGstRateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setGstRate(Number(e.target.value));
     // Update parent immediately
-    onChange && onChange(invoices.map(inv => ({ ...inv, share, gstType, gstRate: Number(e.target.value) })), false);
+    onChange && onChange(invoices.map(inv => ({ ...inv, share, gstType, gstRate: Number(e.target.value), bannerImage, signatureImage, stampImage })), false, bannerImage, signatureImage, stampImage);
   };
 
   // Handle manual input field changes
   const handleManualFieldChange = (field: string, value: string) => {
     const updateInvoices = invoices.map(inv => ({ ...inv, [field]: value }));
     setInvoices(updateInvoices);
-    onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate })), false); // false = not a new upload
+    onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, signatureImage, stampImage })), false, bannerImage, signatureImage, stampImage); // false = not a new upload
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -216,9 +339,9 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
       setInvoices(processed);
       setError("");
       
-      // Pass share, gstType, gstRate to parent for preview
-      const processedWithShare = processed.map(inv => ({ ...inv, share, gstType, gstRate }));
-      onChange && onChange(processedWithShare, true); // true = new upload
+      // Pass share, gstType, gstRate, bannerImage, signatureImage, stampImage to parent for preview
+      const processedWithShare = processed.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, signatureImage, stampImage }));
+      onChange && onChange(processedWithShare, true, bannerImage, signatureImage, stampImage); // true = new upload
     };
     reader.readAsArrayBuffer(file);
   };
@@ -229,7 +352,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
       setError("Please upload a valid Excel file.");
       return;
     }
-    onChange && onChange(invoices.map(inv => ({ ...inv, share, gstType, gstRate })));
+    onChange && onChange(invoices.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, signatureImage, stampImage })), undefined, bannerImage, signatureImage, stampImage);
     if (onPreview) onPreview();
   };
 
@@ -237,6 +360,138 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
     <form className="space-y-4 text-gray-800 w-full max-w-xs bg-white p-6 rounded-lg shadow-md" onSubmit={handleSubmit}>
       <h2 className="text-lg font-semibold mb-4">Upload the file and set GST & Share</h2>
       
+      {/* Banner Image Upload Section */}
+      <div>
+        <h3 className="text-sm font-semibold mb-3 text-purple-600">Banner Image</h3>
+        <div>
+          <label className="block text-xs font-semibold mb-1">Invoice Header Banner (800px × 150px)</label>
+          <div className="flex flex-col gap-2">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleBannerImageUpload}
+              id="banner-upload"
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => document.getElementById('banner-upload')?.click()}
+              className="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded shadow text-xs"
+            >
+              Upload Banner
+            </button>
+            {bannerImage && (
+              <div className="mt-2">
+                <img 
+                  src={bannerImage} 
+                  alt="Banner Preview" 
+                  className="w-full max-h-24 object-contain border border-gray-300 rounded"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBannerImage("");
+                    onBannerImageChange && onBannerImageChange("");
+                    onChange && onChange(invoices.map(inv => ({ ...inv, share, gstType, gstRate, signatureImage, stampImage })), false, "", signatureImage, stampImage);
+                  }}
+                  className="text-xs text-red-600 hover:text-red-800 mt-1"
+                >
+                  Remove
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Signature Image Upload Section */}
+      <div>
+        <h3 className="text-sm font-semibold mb-3 text-green-600">Signature Image</h3>
+        <div>
+          <label className="block text-xs font-semibold mb-1">Signature (120px × 60px)</label>
+          <div className="flex flex-col gap-2">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleSignatureImageUpload}
+              id="signature-upload"
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => document.getElementById('signature-upload')?.click()}
+              className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded shadow text-xs"
+            >
+              Upload Signature
+            </button>
+            {signatureImage && (
+              <div className="mt-2">
+                <img 
+                  src={signatureImage} 
+                  alt="Signature Preview" 
+                  className="w-full max-h-16 object-contain border border-gray-300 rounded"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSignatureImage("");
+                    onSignatureImageChange && onSignatureImageChange("");
+                    onChange && onChange(invoices.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, stampImage })), false, bannerImage, "", stampImage);
+                  }}
+                  className="text-xs text-red-600 hover:text-red-800 mt-1"
+                >
+                  Remove
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Stamp Image Upload Section */}
+      <div>
+        <h3 className="text-sm font-semibold mb-3 text-blue-600">Stamp Image</h3>
+        <div>
+          <label className="block text-xs font-semibold mb-1">Stamp (110px × 100px)</label>
+          <div className="flex flex-col gap-2">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleStampImageUpload}
+              id="stamp-upload"
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => document.getElementById('stamp-upload')?.click()}
+              className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded shadow text-xs"
+            >
+              Upload Stamp
+            </button>
+            {stampImage && (
+              <div className="mt-2">
+                <img 
+                  src={stampImage} 
+                  alt="Stamp Preview" 
+                  className="w-full max-h-20 object-contain border border-gray-300 rounded"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStampImage("");
+                    onStampImageChange && onStampImageChange("");
+                    onChange && onChange(invoices.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, signatureImage })), false, bannerImage, signatureImage, "");
+                  }}
+                  className="text-xs text-red-600 hover:text-red-800 mt-1"
+                >
+                  Remove
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Excel Upload Section */}
       <div>
         <h3 className="text-sm font-semibold mb-3 text-blue-600">Excel Upload</h3>
@@ -292,7 +547,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
                 // Update preview immediately on every keystroke
                 const updateInvoices = invoices.map(inv => ({ ...inv, movieName: value }));
                 setInvoices(updateInvoices);
-                onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate })), false);
+                onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, signatureImage, stampImage })), false, bannerImage, signatureImage, stampImage);
               }}
               className="w-full border px-2 py-1 rounded text-sm"
               placeholder="Enter movie name"
@@ -310,7 +565,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
                 // Update preview immediately on every change
                 const updateInvoices = invoices.map(inv => ({ ...inv, movieVersion: value }));
                 setInvoices(updateInvoices);
-                onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate })), false);
+                onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, signatureImage, stampImage })), false, bannerImage, signatureImage, stampImage);
               }}
               className="w-full border px-2 py-1 rounded text-sm"
               required
@@ -334,7 +589,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
                 // Update preview immediately on every keystroke
                 const updateInvoices = invoices.map(inv => ({ ...inv, language: value }));
                 setInvoices(updateInvoices);
-                onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate })), false);
+                onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, signatureImage, stampImage })), false, bannerImage, signatureImage, stampImage);
               }}
               className="w-full border px-2 py-1 rounded text-sm"
               placeholder="e.g., Hindi, English, Tamil"
@@ -353,7 +608,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
                 // Update preview immediately on every keystroke
                 const updateInvoices = invoices.map(inv => ({ ...inv, screenFormat: value }));
                 setInvoices(updateInvoices);
-                onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate })), false);
+                onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, signatureImage, stampImage })), false, bannerImage, signatureImage, stampImage);
               }}
               className="w-full border px-2 py-1 rounded text-sm"
               placeholder="e.g., 1, 2, 3"
@@ -372,7 +627,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
                 // Update preview immediately on every keystroke
                 const updateInvoices = invoices.map(inv => ({ ...inv, releaseWeek: value }));
                 setInvoices(updateInvoices);
-                onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate })), false);
+                onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, signatureImage, stampImage })), false, bannerImage, signatureImage, stampImage);
               }}
               className="w-full border px-2 py-1 rounded text-sm"
               placeholder="e.g., 1, 2, 3"
@@ -391,7 +646,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
                 // Update preview immediately on every keystroke
                 const updateInvoices = invoices.map(inv => ({ ...inv, cinemaWeek: value }));
                 setInvoices(updateInvoices);
-                onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate })), false);
+                onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, signatureImage, stampImage })), false, bannerImage, signatureImage, stampImage);
               }}
               className="w-full border px-2 py-1 rounded text-sm"
               placeholder="e.g., 1, 2, 3"
@@ -410,7 +665,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
                 // Update preview immediately on every keystroke
                 const updateInvoices = invoices.map(inv => ({ ...inv, screeningDateFrom: value }));
                 setInvoices(updateInvoices);
-                onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate })), false);
+                onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, signatureImage, stampImage })), false, bannerImage, signatureImage, stampImage);
               }}
               className="w-full border px-2 py-1 rounded text-sm"
               placeholder="DD/MM/YYYY"
@@ -428,7 +683,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
                 // Update preview immediately on every keystroke
                 const updateInvoices = invoices.map(inv => ({ ...inv, screeningDateTo: value }));
                 setInvoices(updateInvoices);
-                onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate })), false);
+                onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, signatureImage, stampImage })), false, bannerImage, signatureImage, stampImage);
               }}
               className="w-full border px-2 py-1 rounded text-sm"
               placeholder="DD/MM/YYYY"

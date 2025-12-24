@@ -122,6 +122,9 @@ interface InvoiceData {
   otherDeduction?: string | number;
   gstType?: 'CGST/SGST' | 'IGST'; // Added for GST/IGST selector
   share?: string | number; // Added for distribution percent
+  bannerImage?: string; // Banner image for header (base64 or URL)
+  signatureImage?: string; // Signature image (base64 or URL)
+  stampImage?: string; // Stamp image (base64 or URL)
 }
 
 // Example structure for invoice data (expand as needed)
@@ -178,7 +181,10 @@ const defaultInvoice: InvoiceData = {
   totalCollection: '',
   otherDeduction: '',
   gstType: 'CGST/SGST',
-  share: ''
+  share: '',
+  bannerImage: '',
+  signatureImage: '',
+  stampImage: ''
 };
 
 const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = true }: { data?: typeof defaultInvoice, onChange?: (invoice: any) => void, showDownloadButton?: boolean }) => {
@@ -412,23 +418,33 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
       <div
         ref={previewRef}
         className="w-[800px] mx-auto bg-white shadow-2xl rounded-md p-0 text-black font-sans border border-black"
-        style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000', background: '#fff', width: '800px', minHeight: '1100px', boxSizing: 'border-box', position: 'relative', overflowY: 'auto', overflowX: 'hidden', marginTop: 32, marginBottom: 32 }}
+        style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000', background: '#fff', width: '800px', minHeight: '1100px', boxSizing: 'border-box', position: 'relative', overflowY: 'auto', overflowX: 'visible', marginTop: 32, marginBottom: 32 }}
       >
-        {/* Header */}
-        <div className="flex flex-row items-stretch" style={{ background: '#fff', minHeight: 130, height: 130 }}>
-          <div style={{ width: 220, height: '100%', display: 'flex', alignItems: 'stretch', justifyContent: 'flex-start', background: 'transparent', padding: 0, margin: 0 }}>
-            <img src="/inovice_formatting/1stfflogo.jpg" alt="Logo" style={{ height: '100%', width: '100%', objectFit: 'contain', margin: 0, padding: 0 }} />
+        {/* Header - Banner Image */}
+        {invoice.bannerImage ? (
+          <div style={{ width: '100%', marginBottom: '1rem', padding: '0', overflow: 'visible' }}>
+            <img 
+              src={invoice.bannerImage} 
+              alt="Invoice Banner" 
+              style={{ width: '100%', height: 'auto', maxHeight: '150px', objectFit: 'contain', display: 'block', margin: '0' }} 
+            />
           </div>
-          <div className="flex-1 flex flex-col items-end justify-center pr-8" style={{ color: '#000', textAlign: 'right', fontFamily: 'Arial, Helvetica, sans-serif', height: '100%', paddingTop: 8, paddingBottom: 8, justifyContent: 'center' }}>
-            <div className="font-bold" style={{ fontSize: 20, letterSpacing: 1, lineHeight: 1.1, marginBottom: 8 }}>FIRST FILM STUDIOS LLP</div>
-            <div style={{ fontSize: 13, lineHeight: 1.1 }}>26-104, RIDDHI SIDHI, CHS, CSR COMPLEX, OLD MHADA,</div>
-            <div style={{ fontSize: 13, lineHeight: 1.1 }}>KANDIVALI WEST, MUMBAI - 400067, MAHARASHTRA</div>
-            <div style={{ fontSize: 13, lineHeight: 1.1 }}>info@firstfilmstudios.com</div>
-            <div style={{ fontSize: 13, lineHeight: 1.1 }}>GST- {invoice.gst}</div>
-            <div style={{ fontSize: 13, lineHeight: 1.1 }}>PAN No:- {invoice.pan}</div>
-            <div style={{ fontSize: 13, lineHeight: 1.1 }}>LLP Reg. No.- {invoice.regNo}</div>
+        ) : (
+          <div className="flex flex-row items-stretch" style={{ background: '#fff', minHeight: 130, height: 130 }}>
+            <div style={{ width: 220, height: '100%', display: 'flex', alignItems: 'stretch', justifyContent: 'flex-start', background: 'transparent', padding: 0, margin: 0 }}>
+              <img src="/inovice_formatting/1stfflogo.jpg" alt="Logo" style={{ height: '100%', width: '100%', objectFit: 'contain', margin: 0, padding: 0 }} />
+            </div>
+            <div className="flex-1 flex flex-col items-end justify-center pr-8" style={{ color: '#000', textAlign: 'right', fontFamily: 'Arial, Helvetica, sans-serif', height: '100%', paddingTop: 8, paddingBottom: 8, justifyContent: 'center' }}>
+              <div className="font-bold" style={{ fontSize: 20, letterSpacing: 1, lineHeight: 1.1, marginBottom: 8 }}>FIRST FILM STUDIOS LLP</div>
+              <div style={{ fontSize: 13, lineHeight: 1.1 }}>26-104, RIDDHI SIDHI, CHS, CSR COMPLEX, OLD MHADA,</div>
+              <div style={{ fontSize: 13, lineHeight: 1.1 }}>KANDIVALI WEST, MUMBAI - 400067, MAHARASHTRA</div>
+              <div style={{ fontSize: 13, lineHeight: 1.1 }}>info@firstfilmstudios.com</div>
+              <div style={{ fontSize: 13, lineHeight: 1.1 }}>GST- {invoice.gst}</div>
+              <div style={{ fontSize: 13, lineHeight: 1.1 }}>PAN No:- {invoice.pan}</div>
+              <div style={{ fontSize: 13, lineHeight: 1.1 }}>LLP Reg. No.- {invoice.regNo}</div>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Main Invoice Box */}
         <div className="m-4" style={{ background: '#fff', padding: 0 }}>
@@ -654,12 +670,20 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
           {/* Footer: Stamp and Signature */}
           <div className="flex flex-row items-end justify-end w-full p-4" style={{ minHeight: 100, position: 'relative', zIndex: 1 }}>
             <div style={{ marginRight: 32, position: 'relative' }}>
-              <img src="/inovice_formatting/Stamp_mum.png" alt="Stamp" style={{ width: 120, height: 120, objectFit: 'contain' }} />
+              {invoice.stampImage ? (
+                <img src={invoice.stampImage} alt="Stamp" style={{ width: 120, height: 120, objectFit: 'contain' }} />
+              ) : (
+                <img src="/inovice_formatting/Stamp_mum.png" alt="Stamp" style={{ width: 120, height: 120, objectFit: 'contain' }} />
+              )}
             </div>
             <div className="text-right" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'flex-end' }}>
               <div className="font-bold" style={{ fontSize: 15, marginBottom: 8 }}>For FIRST FILM STUDIOS LLP</div>
               <div style={{ marginBottom: 8 }}>
-                <img src="/inovice_formatting/sign.png" alt="Signature" style={{ width: '120px', height: '60px', objectFit: 'contain' }} />
+                {invoice.signatureImage ? (
+                  <img src={invoice.signatureImage} alt="Signature" style={{ width: '120px', height: '60px', objectFit: 'contain' }} />
+                ) : (
+                  <img src="/inovice_formatting/sign.png" alt="Signature" style={{ width: '120px', height: '60px', objectFit: 'contain' }} />
+                )}
               </div>
               <div className="italic" style={{ fontSize: 13 }}>(Authorised Signatory)</div>
             </div>

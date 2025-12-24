@@ -19,11 +19,25 @@ export default function CreateInvoicePage() {
   const [showWarningDialog, setShowWarningDialog] = useState(false);
   const [hasUploaded, setHasUploaded] = useState(false);
   const [duplicateInvoices, setDuplicateInvoices] = useState<any[]>([]);
+  const [bannerImage, setBannerImage] = useState<string>(""); // Banner image state
+  const [signatureImage, setSignatureImage] = useState<string>(""); // Signature image state
+  const [stampImage, setStampImage] = useState<string>(""); // Stamp image state
 
   // Handler to receive invoices and share/gst from InvoiceForm
-  const handleFormChange = (data: any[], isNewUpload: boolean = false) => {
+  const handleFormChange = (data: any[], isNewUpload: boolean = false, bannerImg?: string, signatureImg?: string, stampImg?: string) => {
     setInvoices(data || []);
     setSelectedIdx(0);
+    
+    // Update images if provided
+    if (bannerImg !== undefined) {
+      setBannerImage(bannerImg);
+    }
+    if (signatureImg !== undefined) {
+      setSignatureImage(signatureImg);
+    }
+    if (stampImg !== undefined) {
+      setStampImage(stampImg);
+    }
     
     // Only reset preview and upload state if this is a new file upload
     if (isNewUpload) {
@@ -40,6 +54,27 @@ export default function CreateInvoicePage() {
       setGstType(data[0].gstType ?? 'CGST/SGST');
       setGstRate(data[0].gstRate ?? 18);
     }
+  };
+
+  // Handler for banner image change
+  const handleBannerImageChange = (bannerImg: string) => {
+    setBannerImage(bannerImg);
+    // Update all invoices with banner image
+    setInvoices(prev => prev.map(inv => ({ ...inv, bannerImage: bannerImg })));
+  };
+
+  // Handler for signature image change
+  const handleSignatureImageChange = (signatureImg: string) => {
+    setSignatureImage(signatureImg);
+    // Update all invoices with signature image
+    setInvoices(prev => prev.map(inv => ({ ...inv, signatureImage: signatureImg })));
+  };
+
+  // Handler for stamp image change
+  const handleStampImageChange = (stampImg: string) => {
+    setStampImage(stampImg);
+    // Update all invoices with stamp image
+    setInvoices(prev => prev.map(inv => ({ ...inv, stampImage: stampImg })));
   };
 
   // New: Upload Excel and invoice data to backend
@@ -457,14 +492,19 @@ export default function CreateInvoicePage() {
             previewSource === 'backend' && backendInvoices.length > 0 ? (
               <InvoicePreview data={{
                 ...backendInvoices[selectedIdx],
-                
-                invoiceNo: backendInvoices[selectedIdx]?.["In_no"] || backendInvoices[selectedIdx]?.invoiceNo || ""
+                invoiceNo: backendInvoices[selectedIdx]?.["In_no"] || backendInvoices[selectedIdx]?.invoiceNo || "",
+                bannerImage: bannerImage || backendInvoices[selectedIdx]?.bannerImage || "",
+                signatureImage: signatureImage || backendInvoices[selectedIdx]?.signatureImage || "",
+                stampImage: stampImage || backendInvoices[selectedIdx]?.stampImage || ""
               }} />
             ) : invoices.length > 0 ? (
               <InvoicePreview data={{
                 ...invoices[selectedIdx],
                 "In_no": invoices[selectedIdx]?.["In_no"] || invoices[selectedIdx]?.invoiceNo || "",
-                invoiceNo: invoices[selectedIdx]?.["In_no"] || invoices[selectedIdx]?.invoiceNo || ""
+                invoiceNo: invoices[selectedIdx]?.["In_no"] || invoices[selectedIdx]?.invoiceNo || "",
+                bannerImage: bannerImage || invoices[selectedIdx]?.bannerImage || "",
+                signatureImage: signatureImage || invoices[selectedIdx]?.signatureImage || "",
+                stampImage: stampImage || invoices[selectedIdx]?.stampImage || ""
               }} />
             ) : (
               <div className="text-gray-400 text-center w-full mt-24">Upload an Excel file to preview invoices.</div>
@@ -476,7 +516,13 @@ export default function CreateInvoicePage() {
         </section>
         {/* Right: InvoiceForm Sidebar */}
         <aside className="w-80 bg-white border-l border-gray-200 flex flex-col items-center p-6">
-          <InvoiceForm onChange={handleFormChange} onPreview={handlePreviewClick} />
+          <InvoiceForm 
+            onChange={handleFormChange} 
+            onPreview={handlePreviewClick} 
+            onBannerImageChange={handleBannerImageChange}
+            onSignatureImageChange={handleSignatureImageChange}
+            onStampImageChange={handleStampImageChange}
+          />
         </aside>
       </main>
       

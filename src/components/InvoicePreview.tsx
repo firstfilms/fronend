@@ -134,6 +134,9 @@ interface InvoiceData {
   otherDeduction?: string | number;
   gstType?: 'CGST/SGST' | 'IGST'; // Added for GST/IGST selector
   share?: string | number; // Added for distribution percent
+  bannerImage?: string; // Banner image for header (base64 or URL)
+  signatureImage?: string; // Signature image (base64 or URL)
+  stampImage?: string; // Stamp image (base64 or URL)
 }
 
 const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, isPdfExport = false }) => {
@@ -371,27 +374,39 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
       )}
       <div
         ref={previewRef}
-        className="w-[800px] mx-auto bg-white shadow-lg p-6 text-black"
-        style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000', background: '#fff', width: '800px', minHeight: '1130px', boxSizing: 'border-box' }}
+        className="w-[800px] mx-auto bg-white shadow-lg text-black"
+        style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000', background: '#fff', width: '800px', minHeight: '1130px', boxSizing: 'border-box', overflow: 'visible' }}
       >
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: '1rem' }}>
-          <div style={{ width: '120px' }}>
-            <img src="/inovice_formatting/1stfflogo.jpg" alt="Logo" style={{ width: '100%', height: 'auto' }} />
+        {/* Header - Banner Image */}
+        {data?.bannerImage ? (
+          <div style={{ width: '100%', marginBottom: '1rem', padding: '0', overflow: 'visible' }}>
+            <img 
+              src={data.bannerImage} 
+              alt="Invoice Banner" 
+              style={{ width: '100%', height: 'auto', maxHeight: '150px', objectFit: 'contain', display: 'block', margin: '0' }} 
+            />
           </div>
-          <div style={{ textAlign: 'right', fontSize: '11px', lineHeight: '1.4' }}>
-            <div style={{ fontWeight: 'bold', fontSize: '16px', marginBottom: '8px' }}>FIRST FILM STUDIOS LLP</div>
-            <div>26-104, RIDDHI SIDHI, CHS, CSR COMPLEX, OLD MHADA,</div>
-            <div>KANDIVALI WEST, MUMBAI - 400067, MAHARASHTRA</div>
-            <div>{email}</div>
-            <div>GST- {gst}</div>
-            <div>PAN No:- {pan}</div>
-            <div>LLP Reg. No.- {regNo}</div>
+        ) : (
+          <div style={{ padding: '1.5rem', paddingBottom: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: '1rem' }}>
+              <div style={{ width: '120px' }}>
+                <img src="/inovice_formatting/1stfflogo.jpg" alt="Logo" style={{ width: '100%', height: 'auto' }} />
+              </div>
+              <div style={{ textAlign: 'right', fontSize: '11px', lineHeight: '1.4' }}>
+                <div style={{ fontWeight: 'bold', fontSize: '16px', marginBottom: '8px' }}>FIRST FILM STUDIOS LLP</div>
+                <div>26-104, RIDDHI SIDHI, CHS, CSR COMPLEX, OLD MHADA,</div>
+                <div>KANDIVALI WEST, MUMBAI - 400067, MAHARASHTRA</div>
+                <div>{email}</div>
+                <div>GST- {gst}</div>
+                <div>PAN No:- {pan}</div>
+                <div>LLP Reg. No.- {regNo}</div>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Main Content Box */}
-        <div style={{ width: '100%' }}>
+        <div style={{ width: '100%', padding: data?.bannerImage ? '0 1.5rem 1.5rem 1.5rem' : '1.5rem' }}>
           {/* Top Details - Two Columns */}
           <div style={{ display: 'flex', width: '100%', fontSize: '12px', lineHeight: '1.6', marginBottom: '1rem' }}>
             {/* Left Column */}
@@ -579,12 +594,20 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
             {/* Footer: Stamp and Signature */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'flex-end', marginTop: '2rem', minHeight: '120px' }}>
                  <div style={{ marginRight: '50px' }}>
-                    <img src="/inovice_formatting/Stamp_mum.png" alt="Stamp" style={{ width: '110px', height: '100px' }} />
+                    {data?.stampImage ? (
+                      <img src={data.stampImage} alt="Stamp" style={{ width: '110px', height: '100px', objectFit: 'contain' }} />
+                    ) : (
+                      <img src="/inovice_formatting/Stamp_mum.png" alt="Stamp" style={{ width: '110px', height: '100px' }} />
+                    )}
                  </div>
                  <div style={{ textAlign: 'center', fontSize: '12px' }}>
                      <b>For FIRST FILM STUDIOS LLP</b>
                      <div style={{ height: '60px', margin: '8px 0' }}>
-                        <img src="/inovice_formatting/sign.png" alt="Signature" style={{ height: '100%', width: 'auto' }} />
+                        {data?.signatureImage ? (
+                          <img src={data.signatureImage} alt="Signature" style={{ height: '100%', width: 'auto', maxWidth: '120px', objectFit: 'contain' }} />
+                        ) : (
+                          <img src="/inovice_formatting/sign.png" alt="Signature" style={{ height: '100%', width: 'auto' }} />
+                        )}
                      </div>
                      <div>(Authorised Signatory)</div>
                  </div>

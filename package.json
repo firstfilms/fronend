@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@types/xlsx": "^0.0.35",
+    "cloudinary": "^2.8.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^3.0.1",
     "mongoose": "^8.16.4",
