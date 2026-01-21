@@ -17,7 +17,7 @@ interface InvoiceFormProps {
   onStampImageChange?: (stampImage: string) => void;
 }
 
-const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview }) => {
+const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview, onBannerImageChange, onSignatureImageChange, onStampImageChange }) => {
   const [share, setShare] = useState<number>(45); // default 45%
   const [gstType, setGstType] = useState<'IGST' | 'CGST/SGST'>('CGST/SGST');
   const [gstRate, setGstRate] = useState<number>(18); // default 18%
