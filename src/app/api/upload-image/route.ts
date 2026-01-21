@@ -9,7 +9,7 @@ cloudinary.config({
   api_secret: 'efA_VgryabUjk_ZUkR2IWPDJEuw',
 });
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(bytes);
 
     // Upload to Cloudinary
-    return new Promise((resolve, reject) => {
+    return new Promise<NextResponse>((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           folder: 'invoice-images',
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
         (error, result) => {
           if (error) {
             console.error('Cloudinary upload error:', error);
-            reject(
+            resolve(
               NextResponse.json(
                 { error: 'Failed to upload image to Cloudinary', details: error.message },
                 { status: 500 }
