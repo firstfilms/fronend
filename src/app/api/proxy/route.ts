@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 
 // ✅ Railway backend URL configured
 // Backend is deployed at: https://zippy-healing-production.up.railway.app
+const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || (process.env.NODE_ENV === 'development' ? 'http://localhost:5000' : 'https://zippy-healing-production.up.railway.app');
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const path = searchParams.get('path') || 'invoices';
     
-    const backendUrl = `https://zippy-healing-production.up.railway.app/api/${path}`;
-    
+    const backendUrl = `${BACKEND_BASE_URL}/api/${path}`;
     console.log('Proxy GET request to:', backendUrl);
     
     // Add timeout and retry logic for network issues
@@ -95,7 +95,7 @@ export async function PUT(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const path = searchParams.get('path') || 'invoices';
-    const backendUrl = `https://zippy-healing-production.up.railway.app/api/${path}`;
+    const backendUrl = `${BACKEND_BASE_URL}/api/${path}`;
     
     console.log('Proxy PUT request to:', backendUrl);
     
@@ -144,7 +144,7 @@ export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const path = searchParams.get('path') || 'invoices';
-    const backendUrl = `https://zippy-healing-production.up.railway.app/api/${path}`;
+    const backendUrl = `${BACKEND_BASE_URL}/api/${path}`;
     
     console.log('Proxy DELETE request to:', backendUrl);
     
@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const path = searchParams.get('path') || 'invoice-upload';
-    const backendUrl = `https://zippy-healing-production.up.railway.app/api/${path}`;
+    const backendUrl = `${BACKEND_BASE_URL}/api/${path}`;
     
     console.log('Proxy POST request to:', backendUrl);
     

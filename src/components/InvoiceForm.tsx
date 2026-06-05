@@ -27,6 +27,8 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview, onBanner
   const [bannerImage, setBannerImage] = useState<string>(""); // Banner image as base64 or blob URL
   const [signatureImage, setSignatureImage] = useState<string>(""); // Signature image as base64 or blob URL
   const [stampImage, setStampImage] = useState<string>(""); // Stamp image as base64 or blob URL
+  const [logoImage, setLogoImage] = useState<string>(""); // Custom Logo Image state
+  const [headerType, setHeaderType] = useState<'logo' | 'banner'>("logo"); // Header type ('logo' | 'banner')
   
   // Manual input fields
   const [movieName, setMovieName] = useState<string>("");
@@ -58,36 +60,71 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview, onBanner
     return data.url; // Return Cloudinary URL
   };
 
+  // Helper to construct mapped invoices with all settings
+  const getMergedInvoices = (updatedFields: Record<string, any> = {}, customInvoices?: InvoiceRow[]) => {
+    const list = customInvoices || invoices;
+    return list.map(inv => ({
+      ...inv,
+      share,
+      gstType,
+      gstRate,
+      bannerImage,
+      signatureImage,
+      stampImage,
+      logoImage,
+      headerType,
+      ...updatedFields
+    }));
+  };
+
   // Handle banner image upload
   const handleBannerImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
-    // Check if it's an image
     if (!file.type.startsWith('image/')) {
       setError('Please upload an image file');
       return;
     }
     
     try {
-      setError(''); // Clear previous errors
-      // Show temporary preview while uploading
+      setError('');
       const tempPreview = URL.createObjectURL(file);
       setBannerImage(tempPreview);
       
-      // Upload to Cloudinary
       const cloudinaryUrl = await uploadImageToCloudinary(file, 'banner');
-      
-      // Update with Cloudinary URL
       setBannerImage(cloudinaryUrl);
       onBannerImageChange && onBannerImageChange(cloudinaryUrl);
-      onChange && onChange(invoices.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage: cloudinaryUrl, signatureImage, stampImage })), false, cloudinaryUrl, signatureImage, stampImage);
-      
-      // Clean up temporary preview
+      onChange && onChange(getMergedInvoices({ bannerImage: cloudinaryUrl }), false);
       URL.revokeObjectURL(tempPreview);
     } catch (error: any) {
       setError(error.message || 'Error uploading banner image');
       setBannerImage('');
+    }
+  };
+
+  // Handle logo image upload
+  const handleLogoImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (!file.type.startsWith('image/')) {
+      setError('Please upload an image file');
+      return;
+    }
+    
+    try {
+      setError('');
+      const tempPreview = URL.createObjectURL(file);
+      setLogoImage(tempPreview);
+      
+      const cloudinaryUrl = await uploadImageToCloudinary(file, 'stamp');
+      setLogoImage(cloudinaryUrl);
+      onChange && onChange(getMergedInvoices({ logoImage: cloudinaryUrl }), false);
+      URL.revokeObjectURL(tempPreview);
+    } catch (error: any) {
+      setError(error.message || 'Error uploading logo image');
+      setLogoImage('');
     }
   };
 
@@ -102,20 +139,14 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview, onBanner
     }
     
     try {
-      setError(''); // Clear previous errors
-      // Show temporary preview while uploading
+      setError('');
       const tempPreview = URL.createObjectURL(file);
       setSignatureImage(tempPreview);
       
-      // Upload to Cloudinary
       const cloudinaryUrl = await uploadImageToCloudinary(file, 'signature');
-      
-      // Update with Cloudinary URL
       setSignatureImage(cloudinaryUrl);
       onSignatureImageChange && onSignatureImageChange(cloudinaryUrl);
-      onChange && onChange(invoices.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, signatureImage: cloudinaryUrl, stampImage })), false, bannerImage, cloudinaryUrl, stampImage);
-      
-      // Clean up temporary preview
+      onChange && onChange(getMergedInvoices({ signatureImage: cloudinaryUrl }), false);
       URL.revokeObjectURL(tempPreview);
     } catch (error: any) {
       setError(error.message || 'Error uploading signature image');
@@ -134,20 +165,14 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview, onBanner
     }
     
     try {
-      setError(''); // Clear previous errors
-      // Show temporary preview while uploading
+      setError('');
       const tempPreview = URL.createObjectURL(file);
       setStampImage(tempPreview);
       
-      // Upload to Cloudinary
       const cloudinaryUrl = await uploadImageToCloudinary(file, 'stamp');
-      
-      // Update with Cloudinary URL
       setStampImage(cloudinaryUrl);
       onStampImageChange && onStampImageChange(cloudinaryUrl);
-      onChange && onChange(invoices.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, signatureImage, stampImage: cloudinaryUrl })), false, bannerImage, signatureImage, cloudinaryUrl);
-      
-      // Clean up temporary preview
+      onChange && onChange(getMergedInvoices({ stampImage: cloudinaryUrl }), false);
       URL.revokeObjectURL(tempPreview);
     } catch (error: any) {
       setError(error.message || 'Error uploading stamp image');
@@ -156,26 +181,28 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview, onBanner
   };
 
   const handleShareChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setShare(Number(e.target.value));
-    // Update parent immediately
-    onChange && onChange(invoices.map(inv => ({ ...inv, share: Number(e.target.value), gstType, gstRate, bannerImage, signatureImage, stampImage })), false, bannerImage, signatureImage, stampImage);
+    const val = Number(e.target.value);
+    setShare(val);
+    onChange && onChange(getMergedInvoices({ share: val }), false);
   };
+  
   const handleGstTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setGstType(e.target.value as 'IGST' | 'CGST/SGST');
-    // Update parent immediately
-    onChange && onChange(invoices.map(inv => ({ ...inv, share, gstType: e.target.value as 'IGST' | 'CGST/SGST', gstRate, bannerImage, signatureImage, stampImage })), false, bannerImage, signatureImage, stampImage);
+    const val = e.target.value as 'IGST' | 'CGST/SGST';
+    setGstType(val);
+    onChange && onChange(getMergedInvoices({ gstType: val }), false);
   };
+  
   const handleGstRateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setGstRate(Number(e.target.value));
-    // Update parent immediately
-    onChange && onChange(invoices.map(inv => ({ ...inv, share, gstType, gstRate: Number(e.target.value), bannerImage, signatureImage, stampImage })), false, bannerImage, signatureImage, stampImage);
+    const val = Number(e.target.value);
+    setGstRate(val);
+    onChange && onChange(getMergedInvoices({ gstRate: val }), false);
   };
 
   // Handle manual input field changes
   const handleManualFieldChange = (field: string, value: string) => {
     const updateInvoices = invoices.map(inv => ({ ...inv, [field]: value }));
     setInvoices(updateInvoices);
-    onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, signatureImage, stampImage })), false, bannerImage, signatureImage, stampImage); // false = not a new upload
+    onChange && onChange(getMergedInvoices({ [field]: value }, updateInvoices), false);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -340,8 +367,8 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview, onBanner
       setError("");
       
       // Pass share, gstType, gstRate, bannerImage, signatureImage, stampImage to parent for preview
-      const processedWithShare = processed.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, signatureImage, stampImage }));
-      onChange && onChange(processedWithShare, true, bannerImage, signatureImage, stampImage); // true = new upload
+      const processedWithShare = processed.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, signatureImage, stampImage, logoImage, headerType }));
+      onChange && onChange(processedWithShare, true); // true = new upload
     };
     reader.readAsArrayBuffer(file);
   };
@@ -352,7 +379,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview, onBanner
       setError("Please upload a valid Excel file.");
       return;
     }
-    onChange && onChange(invoices.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, signatureImage, stampImage })), undefined, bannerImage, signatureImage, stampImage);
+    onChange && onChange(getMergedInvoices(), undefined);
     if (onPreview) onPreview();
   };
 
@@ -360,48 +387,131 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview, onBanner
     <form className="space-y-4 text-gray-800 w-full max-w-xs bg-white p-6 rounded-lg shadow-md" onSubmit={handleSubmit}>
       <h2 className="text-lg font-semibold mb-4">Upload the file and set GST & Share</h2>
       
-      {/* Banner Image Upload Section */}
+      {/* Header Configuration Upload Section */}
       <div>
-        <h3 className="text-sm font-semibold mb-3 text-purple-600">Banner Image</h3>
-        <div>
-          <label className="block text-xs font-semibold mb-1">Invoice Header Banner (800px × 150px)</label>
-          <div className="flex flex-col gap-2">
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleBannerImageUpload}
-              id="banner-upload"
-              className="hidden"
-            />
-            <button
-              type="button"
-              onClick={() => document.getElementById('banner-upload')?.click()}
-              className="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded shadow text-xs"
-            >
-              Upload Banner
-            </button>
-            {bannerImage && (
-              <div className="mt-2">
-                <img 
-                  src={bannerImage} 
-                  alt="Banner Preview" 
-                  className="w-full max-h-24 object-contain border border-gray-300 rounded"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setBannerImage("");
-                    onBannerImageChange && onBannerImageChange("");
-                    onChange && onChange(invoices.map(inv => ({ ...inv, share, gstType, gstRate, signatureImage, stampImage })), false, "", signatureImage, stampImage);
-                  }}
-                  className="text-xs text-red-600 hover:text-red-800 mt-1"
-                >
-                  Remove
-                </button>
-              </div>
-            )}
+        <h3 className="text-sm font-semibold mb-3 text-purple-600 font-bold">Header Configuration</h3>
+        
+        {/* Toggle option for Banner vs Logo */}
+        <div className="mb-3">
+          <label className="block text-xs font-semibold mb-1 text-gray-700">Header Style</label>
+          <div className="flex gap-4">
+            <label className="flex items-center text-xs font-medium text-gray-700 cursor-pointer">
+              <input
+                type="radio"
+                name="headerType"
+                value="logo"
+                checked={headerType === 'logo'}
+                onChange={() => {
+                  setHeaderType('logo');
+                  onChange && onChange(getMergedInvoices({ headerType: 'logo' }), false);
+                }}
+                className="mr-1.5"
+              />
+              Logo & Firm Details
+            </label>
+            <label className="flex items-center text-xs font-medium text-gray-700 cursor-pointer">
+              <input
+                type="radio"
+                name="headerType"
+                value="banner"
+                checked={headerType === 'banner'}
+                onChange={() => {
+                  setHeaderType('banner');
+                  onChange && onChange(getMergedInvoices({ headerType: 'banner' }), false);
+                }}
+                className="mr-1.5"
+              />
+              Full Banner Image
+            </label>
           </div>
         </div>
+
+        {headerType === 'banner' ? (
+          <div>
+            <label className="block text-xs font-semibold mb-1 text-gray-700">Invoice Header Banner (800px × 150px)</label>
+            <div className="flex flex-col gap-2">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleBannerImageUpload}
+                id="banner-upload"
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => document.getElementById('banner-upload')?.click()}
+                className="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded shadow text-xs font-semibold"
+              >
+                Upload Banner
+              </button>
+              <span className="text-[10px] text-gray-500 font-medium">
+                Recommended: 800px × 150px. Aligned to the left. If uploading a square logo image, choose "Logo & Firm Details" header style above.
+              </span>
+              {bannerImage && (
+                <div className="mt-2">
+                  <img 
+                    src={bannerImage} 
+                    alt="Banner Preview" 
+                    className="w-full max-h-24 object-contain border border-gray-300 rounded"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBannerImage("");
+                      onBannerImageChange && onBannerImageChange("");
+                      onChange && onChange(getMergedInvoices({ bannerImage: "" }), false);
+                    }}
+                    className="text-xs text-red-600 hover:text-red-800 mt-1 font-semibold block"
+                  >
+                    Remove Banner
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div>
+            <label className="block text-xs font-semibold mb-1 text-gray-700">Custom Firm Logo (e.g. 120px wide)</label>
+            <div className="flex flex-col gap-2">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleLogoImageUpload}
+                id="logo-upload"
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => document.getElementById('logo-upload')?.click()}
+                className="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded shadow text-xs font-semibold"
+              >
+                Upload Logo
+              </button>
+              <span className="text-[10px] text-gray-500 font-medium">
+                Recommended width: 120px. Replaces the default logo on the left; other firm text details remain on the right.
+              </span>
+              {logoImage && (
+                <div className="mt-2">
+                  <img 
+                    src={logoImage} 
+                    alt="Logo Preview" 
+                    className="w-24 max-h-24 object-contain border border-gray-300 rounded"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLogoImage("");
+                      onChange && onChange(getMergedInvoices({ logoImage: "" }), false);
+                    }}
+                    className="text-xs text-red-600 hover:text-red-800 mt-1 font-semibold block"
+                  >
+                    Remove Logo
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Signature Image Upload Section */}

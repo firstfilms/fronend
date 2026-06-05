@@ -49,7 +49,7 @@ export const generateStandardizedPDF = async (
     hiddenDiv.style.left = '-9999px';
     hiddenDiv.style.top = '0';
     hiddenDiv.style.width = `${PDF_GENERATION_CONFIG.canvas.width}px`;
-    hiddenDiv.style.height = `${PDF_GENERATION_CONFIG.canvas.height}px`;
+    hiddenDiv.style.height = 'auto'; // Auto height to allow layout of multiple pages
     hiddenDiv.style.background = '#fff';
     hiddenDiv.style.color = '#000';
     hiddenDiv.style.fontFamily = 'Arial, Helvetica, sans-serif';
@@ -146,36 +146,7 @@ export const generateStandardizedPDF = async (
     // Wait for all images to load
     await waitForImagesToLoad(hiddenDiv);
     
-    // Use standardized canvas settings
     const scale = options.customScale || PDF_GENERATION_CONFIG.canvas.scale;
-    const canvas = await html2canvas(hiddenDiv, {
-      ...PDF_GENERATION_CONFIG.canvas,
-      scale,
-      onclone: (clonedDoc) => {
-        // Ensure stamp maintains exact dimensions in cloned document
-        const clonedStamp = clonedDoc.querySelector('img[src*="Stamp_mum.png"]');
-        if (clonedStamp instanceof HTMLElement) {
-          clonedStamp.style.width = '144px';
-          clonedStamp.style.height = '120px';
-          clonedStamp.style.objectFit = 'contain';
-          clonedStamp.style.aspectRatio = '1.2/1';
-          clonedStamp.style.transform = 'none';
-          clonedStamp.style.scale = '1';
-          clonedStamp.style.flexShrink = '0';
-          clonedStamp.style.flexGrow = '0';
-        }
-      },
-      ignoreElements: (element) => {
-        // Ignore elements with problematic CSS
-        const style = window.getComputedStyle(element);
-        return style.color.includes('oklch') || 
-               style.backgroundColor.includes('oklch') ||
-               style.borderColor.includes('oklch');
-      }
-    });
-    
-    // Generate image data with standardized settings
-    const imgData = canvas.toDataURL(PDF_GENERATION_CONFIG.image.format, PDF_GENERATION_CONFIG.image.quality);
     
     // Create PDF with standardized settings
     const pdf = new jsPDF({
@@ -187,28 +158,107 @@ export const generateStandardizedPDF = async (
     
     const pdfWidth = pdf.internal.pageSize.getWidth();
     const pdfHeight = pdf.internal.pageSize.getHeight();
-    const canvasWidth = canvas.width;
-    const canvasHeight = canvas.height;
-    
-    // Calculate dimensions with consistent margins
     const margin = PDF_GENERATION_CONFIG.pdf.margin;
     const availableWidth = pdfWidth - (margin * 2);
     const availableHeight = pdfHeight - (margin * 2);
+
+    // Identify if the document is structured with distinct page elements
+    const pageElements = hiddenDiv.querySelectorAll('.invoice-page');
     
-    // Calculate scaling to fit content properly
-    const widthRatio = availableWidth / canvasWidth;
-    const heightRatio = availableHeight / canvasHeight;
-    const scaleRatio = Math.min(widthRatio, heightRatio);
-    
-    const finalWidth = canvasWidth * scaleRatio;
-    const finalHeight = canvasHeight * scaleRatio;
-    
-    // Center the content
-    const x = (pdfWidth - finalWidth) / 2;
-    const y = (pdfHeight - finalHeight) / 2;
-    
-    // Add image to PDF
-    pdf.addImage(imgData, "PNG", x, y, finalWidth, finalHeight, undefined, 'FAST');
+    if (pageElements.length > 0) {
+      // Multi-page PDF generation: render each page element independently
+      for (let i = 0; i < pageElements.length; i++) {
+        const pageEl = pageElements[i] as HTMLElement;
+        
+        // Wait for page-specific images to load
+        await waitForImagesToLoad(pageEl);
+        
+        const canvas = await html2canvas(pageEl, {
+          ...PDF_GENERATION_CONFIG.canvas,
+          height: 1130, // Force canvas to match single A4 page height
+          scale,
+          onclone: (clonedDoc) => {
+            const clonedStamp = clonedDoc.querySelector('img[src*="Stamp_mum.png"]');
+            if (clonedStamp instanceof HTMLElement) {
+              clonedStamp.style.width = '144px';
+              clonedStamp.style.height = '120px';
+              clonedStamp.style.objectFit = 'contain';
+              clonedStamp.style.aspectRatio = '1.2/1';
+              clonedStamp.style.transform = 'none';
+              clonedStamp.style.scale = '1';
+              clonedStamp.style.flexShrink = '0';
+              clonedStamp.style.flexGrow = '0';
+            }
+          },
+          ignoreElements: (element) => {
+            const style = window.getComputedStyle(element);
+            return style.color.includes('oklch') || 
+                   style.backgroundColor.includes('oklch') ||
+                   style.borderColor.includes('oklch');
+          }
+        });
+        
+        const imgData = canvas.toDataURL(PDF_GENERATION_CONFIG.image.format, PDF_GENERATION_CONFIG.image.quality);
+        const canvasWidth = canvas.width;
+        const canvasHeight = canvas.height;
+        
+        const widthRatio = availableWidth / canvasWidth;
+        const heightRatio = availableHeight / canvasHeight;
+        const scaleRatio = Math.min(widthRatio, heightRatio);
+        
+        const finalWidth = canvasWidth * scaleRatio;
+        const finalHeight = canvasHeight * scaleRatio;
+        
+        const x = (pdfWidth - finalWidth) / 2;
+        const y = (pdfHeight - finalHeight) / 2;
+        
+        if (i > 0) {
+          pdf.addPage();
+        }
+        pdf.addImage(imgData, "PNG", x, y, finalWidth, finalHeight, undefined, 'FAST');
+      }
+    } else {
+      // Single-page PDF generation fallback
+      const canvas = await html2canvas(hiddenDiv, {
+        ...PDF_GENERATION_CONFIG.canvas,
+        scale,
+        onclone: (clonedDoc) => {
+          const clonedStamp = clonedDoc.querySelector('img[src*="Stamp_mum.png"]');
+          if (clonedStamp instanceof HTMLElement) {
+            clonedStamp.style.width = '144px';
+            clonedStamp.style.height = '120px';
+            clonedStamp.style.objectFit = 'contain';
+            clonedStamp.style.aspectRatio = '1.2/1';
+            clonedStamp.style.transform = 'none';
+            clonedStamp.style.scale = '1';
+            clonedStamp.style.flexShrink = '0';
+            clonedStamp.style.flexGrow = '0';
+          }
+        },
+        ignoreElements: (element) => {
+          const style = window.getComputedStyle(element);
+          return style.color.includes('oklch') || 
+                 style.backgroundColor.includes('oklch') ||
+                 style.borderColor.includes('oklch');
+        }
+      });
+      
+      const imgData = canvas.toDataURL(PDF_GENERATION_CONFIG.image.format, PDF_GENERATION_CONFIG.image.quality);
+      const canvasWidth = canvas.width;
+      const canvasHeight = canvas.height;
+      
+      const widthRatio = availableWidth / canvasWidth;
+      const heightRatio = availableHeight / canvasHeight;
+      const scaleRatio = Math.min(widthRatio, heightRatio);
+      
+      const finalWidth = canvasWidth * scaleRatio;
+      const finalHeight = canvasHeight * scaleRatio;
+      
+      const x = (pdfWidth - finalWidth) / 2;
+      const y = (pdfHeight - finalHeight) / 2;
+      
+      pdf.addImage(imgData, "PNG", x, y, finalWidth, finalHeight, undefined, 'FAST');
+    }
     
     // Generate PDF data
     const pdfData = pdf.output('arraybuffer');

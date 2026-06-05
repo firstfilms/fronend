@@ -274,33 +274,36 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
       return originalRows;
     }
     
-    // Create a map of existing data by date for quick lookup
+    // Helper to normalize dates for robust matching by only comparing day and month
+    const getDayMonthKey = (d: string) => {
+      if (!d) return "";
+      const match = d.match(/^(\d{2})[\/\-](\d{2})/);
+      if (match) {
+        return `${match[1]}-${match[2]}`;
+      }
+      const ymdMatch = d.match(/^\d{4}-(\d{2})-(\d{2})/);
+      if (ymdMatch) {
+        return `${ymdMatch[2]}-${ymdMatch[1]}`;
+      }
+      return d;
+    };
+    
+    // Create a map of existing data by date for quick lookup (ignoring year)
     const existingDataMap = new Map();
     originalRows.forEach(row => {
       if (row && row.date) {
-        // Normalize date format for comparison - convert to DD/MM/YYYY
-        let normalizedDate = row.date;
-        
-        // Handle different date formats and convert to DD/MM/YYYY
-        if (normalizedDate.includes('-')) {
-          const parts = normalizedDate.split('-');
-          if (parts[0].length === 4) {
-            // YYYY-MM-DD format
-            normalizedDate = `${parts[2]}/${parts[1]}/${parts[0]}`;
-          } else {
-            // DD-MM-YYYY format
-            normalizedDate = `${parts[0]}/${parts[1]}/${parts[2]}`;
-          }
+        const key = getDayMonthKey(row.date);
+        if (key) {
+          existingDataMap.set(key, row);
         }
-        
-        existingDataMap.set(normalizedDate, row);
       }
     });
     
     // Create new table rows with ALL dates between screening dates
     return dateRange.map((date) => {
       // Check if we have existing data for this date
-      const existingRow = existingDataMap.get(date);
+      const key = getDayMonthKey(date);
+      const existingRow = existingDataMap.get(key);
       
       return {
         date: date,
@@ -435,13 +438,12 @@ const EditPreview = ({ data = defaultInvoice, onChange, showDownloadButton = tru
               <img src="/inovice_formatting/1stfflogo.jpg" alt="Logo" style={{ height: '100%', width: '100%', objectFit: 'contain', margin: 0, padding: 0 }} />
             </div>
             <div className="flex-1 flex flex-col items-end justify-center pr-8" style={{ color: '#000', textAlign: 'right', fontFamily: 'Arial, Helvetica, sans-serif', height: '100%', paddingTop: 8, paddingBottom: 8, justifyContent: 'center' }}>
-              <div className="font-bold" style={{ fontSize: 20, letterSpacing: 1, lineHeight: 1.1, marginBottom: 8 }}>FIRST FILM STUDIOS LLP</div>
-              <div style={{ fontSize: 13, lineHeight: 1.1 }}>26-104, RIDDHI SIDHI, CHS, CSR COMPLEX, OLD MHADA,</div>
-              <div style={{ fontSize: 13, lineHeight: 1.1 }}>KANDIVALI WEST, MUMBAI - 400067, MAHARASHTRA</div>
-              <div style={{ fontSize: 13, lineHeight: 1.1 }}>info@firstfilmstudios.com</div>
-              <div style={{ fontSize: 13, lineHeight: 1.1 }}>GST- {invoice.gst}</div>
-              <div style={{ fontSize: 13, lineHeight: 1.1 }}>PAN No:- {invoice.pan}</div>
-              <div style={{ fontSize: 13, lineHeight: 1.1 }}>LLP Reg. No.- {invoice.regNo}</div>
+              <div className="font-bold" style={{ fontSize: 20, letterSpacing: 1, lineHeight: 1.1, marginBottom: 8 }}>{invoice.firmName || 'FIRST FILM STUDIOS LLP'}</div>
+              <div style={{ fontSize: 13, lineHeight: 1.1, whiteSpace: 'pre-line' }}>{invoice.address || '26-104, RIDDHI SIDHI, CHS, CSR COMPLEX, OLD MHADA,\nKANDIVALI WEST, MUMBAI - 400067, MAHARASHTRA'}</div>
+              <div style={{ fontSize: 13, lineHeight: 1.1 }}>{invoice.email || 'info@firstfilmstudios.com'}</div>
+              <div style={{ fontSize: 13, lineHeight: 1.1 }}>GST- {invoice.gst || '27AAJFF7915J1Z1'}</div>
+              <div style={{ fontSize: 13, lineHeight: 1.1 }}>PAN No:- {invoice.pan || 'AAJFF7915J'}</div>
+              <div style={{ fontSize: 13, lineHeight: 1.1 }}>LLP Reg. No.- {invoice.regNo || 'ACH-2259'}</div>
             </div>
           </div>
         )}

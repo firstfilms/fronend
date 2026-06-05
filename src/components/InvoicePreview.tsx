@@ -114,7 +114,7 @@ interface InvoiceData {
   netAmount?: string;
   amountWords?: string;
   remark?: string;
-  terms?: string[];
+  terms?: string | string[];
   signatory?: string;
   regNo?: string;
   firmName?: string;
@@ -137,25 +137,24 @@ interface InvoiceData {
   bannerImage?: string; // Banner image for header (base64 or URL)
   signatureImage?: string; // Signature image (base64 or URL)
   stampImage?: string; // Stamp image (base64 or URL)
+  logoImage?: string; // Logo image for header
+  headerType?: 'logo' | 'banner'; // Header style selector
 }
 
 const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, isPdfExport = false }) => {
 
   const previewRef = useRef<HTMLDivElement>(null);
 
-  // ONLY use Excel "In_no" field, nothing else
+  // Prefer the explicit 'invoiceNo' field, fall back to Excel "In_no" if needed
   const displayInvoiceNo = (() => {
-    // ONLY use the Excel "In_no" field, nothing else
-    if (data?.["In_no"] && typeof data["In_no"] === 'string' && data["In_no"].trim()) {
-      const excelInvoiceNo = data["In_no"].trim();
-      console.log('InvoicePreview: Found Excel "In_no":', excelInvoiceNo);
-      return excelInvoiceNo;
+    if (typeof data?.invoiceNo === 'string' && data.invoiceNo.trim()) {
+      return data.invoiceNo.trim();
     }
-    
-    // If "In_no" is not found, return placeholder
-    console.warn('InvoicePreview: Excel "In_no" field not found');
-    console.log('InvoicePreview: Available fields:', Object.keys(data || {}));
-    return 'No "In_no" Found';
+    if (data?.["In_no"] && typeof data["In_no"] === 'string' && data["In_no"].trim()) {
+      return data["In_no"].trim();
+    }
+    console.warn('InvoicePreview: No invoice number found');
+    return 'No Invoice No';
   })();
   
   // Double-check: if somehow a backend invoice number got through, don't display it
@@ -165,34 +164,39 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
   }
   
   // Fallbacks for static values (use blank/null for new fields)
-  const clientName = data?.clientName ?? "AMBUJA REALITY DEVELOPMENT LIMITED";
-  const clientAddress = data?.clientAddress ?? "1ST FLOOR, AMBUJA CITY CENTER MALL, VIDHAN SABHA ROAD\nSADDU, RAIPUR, CHHATISGARH";
-  const panNo = data?.panNo ?? "AAFCA4593G";
-  const gstinNo = data?.gstinNo ?? "22AAFCA4593G1ZT";
-  const property = data?.property ?? "City Center";
-  const centre = data?.centre ?? "RAIPUR";
-  const placeOfService = data?.placeOfService ?? "CHHATISGARH";
-  const businessTerritory = data?.businessTerritory ?? "CI";
+  const clientName = data?.clientName || "";
+  const clientAddress = data?.clientAddress || "";
+  const panNo = data?.panNo || "";
+  const gstinNo = data?.gstinNo || "";
+  const property = data?.property || "";
+  const centre = data?.centre || "";
+  const placeOfService = data?.placeOfService || "";
+  const businessTerritory = data?.businessTerritory || "";
   
-  const invoiceDate = data?.invoiceDate ?? "23/06/2025";
-  const movieName = data?.movieName ?? "NARIVETTA";
-  const movieVersion = data?.movieVersion ?? "2D";
-  const language = data?.language ?? "HINDI";
-  const screenFormat = data?.screenFormat ?? "";
-  const week = data?.week ?? data?.releaseWeek ?? "1";
-  const cinemaWeek = data?.cinemaWeek ?? "1";
-  const screeningFrom = data?.screeningFrom ?? "01/08/2025";
-  const screeningTo = data?.screeningTo ?? "07/08/2025";
-  const screeningDateFrom = data?.screeningDateFrom ?? screeningFrom;
-  const screeningDateTo = data?.screeningDateTo ?? screeningTo;
-  const hsnSacCode = data?.hsnSacCode ?? "997332";
-  const description = data?.description ?? "Theatrical Exhibition Rights";
+  const invoiceDate = data?.invoiceDate || "";
+  const movieName = data?.movieName || "";
+  const movieVersion = data?.movieVersion || "";
+  const language = data?.language || "";
+  const screenFormat = data?.screenFormat || "";
+  const week = data?.week || data?.releaseWeek || "";
+  const cinemaWeek = data?.cinemaWeek || "";
+  const screeningFrom = data?.screeningFrom || "";
+  const screeningTo = data?.screeningTo || "";
+  const screeningDateFrom = data?.screeningDateFrom || screeningFrom;
+  const screeningDateTo = data?.screeningDateTo || screeningTo;
+  const hsnSacCode = data?.hsnSacCode || "";
+  const description = data?.description || "";
   const distributionPercent = safeNumber(data?.share ?? data?.distributionPercent ?? 45);
   const gstType = data?.gstType ?? 'IGST';
   const gstRate = safeNumber(data?.gstRate ?? 0);
   const table = data?.table ?? [];
-  const showTax = data?.showTax ?? 1200;
-  const otherDeduction = data?.otherDeduction ?? 120;
+  const showTax = data?.showTax ?? 0;
+  const logoImage = data?.logoImage || "";
+  const bannerImage = data?.bannerImage || "";
+  const signatureImage = data?.signatureImage || "";
+  const stampImage = data?.stampImage || "";
+  const headerType = data?.headerType || "logo";
+  const otherDeduction = data?.otherDeduction ?? 0;
   const totalShow = data?.totalShow ?? 0;
   const totalAud = data?.totalAud ?? 0;
   const totalCollection = data?.totalCollection ?? 0;
@@ -205,6 +209,17 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
   const regNo = data?.regNo ?? "ACH-2259";
   const firmName = data?.firmName ?? "FIRST FILM STUDIOS LLP";
   const address = data?.address ?? "26-104, RIDDHI SIDHI, CHS, CSR COMPLEX, OLD MHADA, KANDIVALI WEST, MUMBAI - 400067, MAHARASHTRA";
+  // Helper to format address with a max word count per line for better layout
+  const formatAddress = (addr: string, maxWords: number = 10): string => {
+    if (!addr) return '';
+    const words = addr.split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    for (let i = 0; i < words.length; i += maxWords) {
+      lines.push(words.slice(i, i + maxWords).join(' '));
+    }
+    return lines.join('\n');
+  };
+  const formattedAddress = formatAddress(address);
   const gst = data?.gst ?? "27AAJFF7915J1Z1";
   const pan = data?.pan ?? "AAJFF7915J";
   const email = data?.email ?? "info@firstfilmstudios.com";
@@ -255,35 +270,18 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
 
   // Generate table rows with proper date format - show ALL days between screening dates
   const generateTableRows = (): Array<{date: string; show: number; aud: number; collection: number;}> => {
-    const dateRange = generateDateRange(screeningDateFrom || screeningFrom, screeningDateTo || screeningTo);
-    
-    if (dateRange.length === 0 && originalTableRows.length > 0) {
-      return originalTableRows.map(row => ({...row, date: formatDate(row.date)}));
-    }
-    
-    // Create a map of existing data by date for quick lookup
-    const existingDataMap = new Map();
-    if (Array.isArray(originalTableRows)) {
-      originalTableRows.forEach(row => {
-        if (row && row.date) {
-          existingDataMap.set(formatDate(row.date), row);
-        }
-      });
-    }
-    
-    // Create new table rows with ALL dates between screening dates
-    return dateRange.map((date) => {
-      // Check if we have existing data for this date
-      const existingRow = existingDataMap.get(date);
-      
-      return {
-        date: date,
-        show: existingRow?.show || 0,
-        aud: existingRow?.aud || 0,
-        collection: existingRow?.collection || 0,
-      };
-    });
-  };
+  // Use original table rows directly, preserving original values
+  if (Array.isArray(originalTableRows) && originalTableRows.length > 0) {
+    return originalTableRows.map(row => ({
+      date: formatDate(row.date),
+      show: row.show,
+      aud: row.aud,
+      collection: row.collection,
+    }));
+  }
+  // Fallback to empty array if no data
+  return [];
+};
 
   // PDF Export using standardized PDF generator
   const handleDownloadPDF = async () => {
@@ -361,6 +359,15 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
   const leftCellStyle = { ...baseCellStyle, padding: '0 4px', textAlign: 'left' as const };
 
 
+  const rowsPerPage = 20;
+  const totalPages = Math.max(1, Math.ceil(tableRows.length / rowsPerPage));
+  const pages = [];
+  for (let p = 0; p < totalPages; p++) {
+    const pageRows = tableRows.slice(p * rowsPerPage, (p + 1) * rowsPerPage);
+    const isLastPage = p === totalPages - 1;
+    pages.push({ index: p, rows: pageRows, isLastPage });
+  }
+
   return (
     <div>
       {showDownloadButton && (
@@ -372,247 +379,291 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
           Download PDF
         </button>
       )}
-      <div
-        ref={previewRef}
-        className="w-[800px] mx-auto bg-white shadow-lg text-black"
-        style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000', background: '#fff', width: '800px', minHeight: '1130px', boxSizing: 'border-box', overflow: 'visible' }}
-      >
-        {/* Header - Banner Image */}
-        {data?.bannerImage ? (
-          <div style={{ width: '100%', marginBottom: '1rem', padding: '0', overflow: 'visible' }}>
-            <img 
-              src={data.bannerImage} 
-              alt="Invoice Banner" 
-              style={{ width: '100%', height: 'auto', maxHeight: '150px', objectFit: 'contain', display: 'block', margin: '0' }} 
-            />
-          </div>
-        ) : (
-          <div style={{ padding: '1.5rem', paddingBottom: '1rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: '1rem' }}>
-              <div style={{ width: '120px' }}>
-                <img src="/inovice_formatting/1stfflogo.jpg" alt="Logo" style={{ width: '100%', height: 'auto' }} />
-              </div>
-              <div style={{ textAlign: 'right', fontSize: '11px', lineHeight: '1.4' }}>
-                <div style={{ fontWeight: 'bold', fontSize: '16px', marginBottom: '8px' }}>FIRST FILM STUDIOS LLP</div>
-                <div>26-104, RIDDHI SIDHI, CHS, CSR COMPLEX, OLD MHADA,</div>
-                <div>KANDIVALI WEST, MUMBAI - 400067, MAHARASHTRA</div>
-                <div>{email}</div>
-                <div>GST- {gst}</div>
-                <div>PAN No:- {pan}</div>
-                <div>LLP Reg. No.- {regNo}</div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Main Content Box */}
-        <div style={{ width: '100%', padding: data?.bannerImage ? '0 1.5rem 1.5rem 1.5rem' : '1.5rem' }}>
-          {/* Top Details - Two Columns */}
-          <div style={{ display: 'flex', width: '100%', fontSize: '12px', lineHeight: '1.6', marginBottom: '1rem' }}>
-            {/* Left Column */}
-            <div style={{ width: '62%', paddingRight: '2rem' }}>
-              <div style={{ display: 'flex' }}>
-                <span style={{ width: '30px' }}>M/s</span>
-                <div style={{ fontWeight: 'bold' }}>{clientName}</div>
-              </div>
-              <div style={{ marginLeft: '30px', whiteSpace: 'pre-line' }}>{clientAddress}</div>
-              <div style={{ display: 'flex', marginTop: '1rem' }}>
-                <span style={{ width: '120px' }}>PAN No.</span><span>{panNo}</span>
-              </div>
-              <div style={{ display: 'flex' }}>
-                <span style={{ width: '120px' }}>GSTIN No.</span><span>{gstinNo}</span>
-              </div>
-              <div style={{ display: 'flex' }}>
-                <span style={{ width: '120px' }}>Property</span><span>{property}</span>
-              </div>
-              <div style={{ display: 'flex' }}>
-                <span style={{ width: '120px' }}>Centre</span><span>{centre}</span>
-              </div>
-              <div style={{ display: 'flex' }}>
-                <span style={{ width: '120px' }}>Place of Service</span><span>{placeOfService}</span>
-              </div>
-              <div style={{ display: 'flex' }}>
-                <span style={{ width: '120px' }}>Business Territory</span><span>{businessTerritory}</span>
-              </div>
-            </div>
-            {/* Right Column */}
-            <div style={{ width: '38%', paddingLeft: '0' }}>
-                <div style={{ display: 'flex' }}><span style={{ width: '110px' }}>Invoice No.</span><span style={{ fontWeight: 'bold' }}>{displayInvoiceNo}</span></div>
-                <div style={{ display: 'flex' }}><span style={{ width: '110px' }}>Invoice Date</span><span>{invoiceDate}</span></div>
-                <div style={{ display: 'flex' }}><span style={{ width: '110px' }}>Movie Name</span><span style={{ fontWeight: 'bold' }}>{movieName}</span></div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem' }}>
-                    <div><span style={{ width: '110px', display: 'inline-block' }}>Movie Version</span><span>{movieVersion}</span></div>
-                    <div style={{ fontWeight: 'bold' }}>{language}</div>
+      <div ref={previewRef} style={{ width: '800px', margin: '0 auto', overflow: 'visible' }}>
+        {pages.map((page, pIdx) => {
+          const isLast = page.isLastPage;
+          return (
+            <div
+              key={pIdx}
+              className="invoice-page bg-white shadow-lg text-black"
+              style={{
+                fontFamily: 'Arial, Helvetica, sans-serif',
+                color: '#000',
+                background: '#fff',
+                width: '800px',
+                minHeight: '1130px',
+                height: '1130px',
+                boxSizing: 'border-box',
+                overflow: 'hidden',
+                pageBreakAfter: pIdx < totalPages - 1 ? 'always' : 'auto',
+                marginBottom: pIdx < totalPages - 1 ? '20px' : '0',
+                padding: '0',
+                position: 'relative'
+              }}
+            >
+              {/* Header - Banner Image or Logo + Firm Details */}
+              {headerType === 'banner' && bannerImage ? (
+                <div style={{ width: '100%', marginBottom: '1rem', padding: '0', overflow: 'visible' }}>
+                  <img 
+                    src={bannerImage} 
+                    alt="Invoice Banner" 
+                    style={{ height: 'auto', maxHeight: '150px', objectFit: 'contain', display: 'block', marginLeft: '0', marginRight: 'auto' }} 
+                  />
                 </div>
-                <div style={{ display: 'flex' }}><span style={{ width: '110px' }}>Screen Formate</span><span>{screenFormat}</span></div>
-                <div style={{ display: 'flex' }}><span style={{ width: '110px' }}>Release Week</span><span>{week}</span></div>
-                <div style={{ display: 'flex' }}><span style={{ width: '110px' }}>Cinema Week</span><span>{cinemaWeek}</span></div>
-                <div style={{ display: 'flex' }}>
-                    <span style={{ width: '110px' }}>Screening Date</span>
-                    <span style={{ whiteSpace: 'nowrap' }}>From <span style={{ fontWeight: 'bold' }}>{formatDate(screeningDateFrom)}</span> To <span style={{ fontWeight: 'bold' }}>{formatDate(screeningDateTo)}</span></span>
-                </div>
-            </div>
-          </div>
-
-          {/* Wrapper for table and amount in words */}
-          <div style={{ border: '2px solid black', fontSize: '11px' }}>
-            {/* Main Table Flex Container */}
-            <div style={{ display: 'flex', width: '100%' }}>
-                {/* Left Section */}
-                <div style={{ width: '62%', borderRight: '2px solid black', position: 'relative' }}>
-                    {/* THIS IS THE NEW DIV FOR THE CONTINUOUS VERTICAL LINE */}
-                    <div style={{
-                        position: 'absolute',
-                        top: 0,
-                        bottom: 0,
-                        left: '45%', // Position after Date (25) + Show (10) + Aud (10)
-                        width: '1px',
-                        backgroundColor: 'black',
-                        transform: 'translateX(-0.5px)' // Center the line precisely
-                    }}></div>
-                    {/* Header */}
-                    <div style={{ display: 'flex', fontWeight: 'bold', borderBottom: '1px solid black' }}>
-                        <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '25%', borderRight: '1px solid black', borderBottom: '0' }}>Date</div>
-                        <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '10%', borderRight: '1px solid black', borderBottom: '0' }}>Show</div>
-                        <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '10%', borderBottom: '0' }}>Aud.</div>
-                        <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '20%', borderRight: '1px solid black', borderBottom: '0' }}>Collection</div>
-                        <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '35%', borderBottom: '0' }}>Deduction</div>
+              ) : (
+                <div style={{ padding: '1.5rem', paddingBottom: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: '1rem' }}>
+                    <div style={{ width: '120px' }}>
+                      <img src={logoImage || "/inovice_formatting/1stfflogo.jpg"} alt="Logo" style={{ width: '100%', height: 'auto' }} />
                     </div>
-                    {/* Body */}
-                    <div style={{borderBottom: '1px solid black'}}>
-                      {tableRows.map((row, index) => (
-                          <div key={index} style={{ display: 'flex' }}>
-                              <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '25%', borderRight: '1px solid black', borderBottom: '0' }}>{formatDate(row.date)}</div>
-                              <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '10%', borderRight: '1px solid black', borderBottom: '0' }}>{row.show !== undefined && row.show !== null ? row.show : ''}</div>
-                              <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '10%', borderBottom: '0' }}>{row.aud !== undefined && row.aud !== null ? row.aud : ''}</div>
-                              <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '20%', borderRight: '1px solid black', borderBottom: '0' }}>
-                                  {(row.collection || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </div>
-                              <div className="pdf-cell-fix" style={{ ...leftCellStyle, width: '35%', padding: '0 4px', borderBottom: '0' }}>
-                                  {index === 0 && showTaxVal > 0 && (
-                                      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', lineHeight: `${rowHeight}px`}}>
-                                          <span>Show Tax</span>
-                                          <span style={{ textAlign: 'right', paddingRight: '4px' }}>{showTaxVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                      </div>
-                                  )}
-                              </div>
+                    <div style={{ textAlign: 'right', fontSize: '11px', lineHeight: '1.4' }}>
+                      <div style={{ fontWeight: 'bold', fontSize: '16px', marginBottom: '8px' }}>{firmName}</div>
+                      <div style={{ whiteSpace: 'pre-line' }}>{formattedAddress}</div>
+                      <div>{email}</div>
+                      <div>GST- {gst}</div>
+                      <div>PAN No:- {pan}</div>
+                      <div>LLP Reg. No.- {regNo}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Main Content Box */}
+              <div style={{ width: '100%', padding: (headerType === 'banner' && bannerImage) ? '0 1.5rem 1.5rem 1.5rem' : '1.5rem' }}>
+                {/* Top Details - Two Columns */}
+                <div style={{ display: 'flex', width: '100%', fontSize: '12px', lineHeight: '1.6', marginBottom: '1rem' }}>
+                  {/* Left Column */}
+                  <div style={{ width: '62%', paddingRight: '2rem' }}>
+                    <div style={{ display: 'flex' }}>
+                      <span style={{ width: '30px' }}>M/s</span>
+                      <div style={{ fontWeight: 'bold' }}>{clientName}</div>
+                    </div>
+                    <div style={{ marginLeft: '30px', whiteSpace: 'pre-line' }}>{clientAddress}</div>
+                    <div style={{ display: 'flex', marginTop: '1rem' }}>
+                      <span style={{ width: '120px' }}>PAN No.</span><span>{panNo}</span>
+                    </div>
+                    <div style={{ display: 'flex' }}>
+                      <span style={{ width: '120px' }}>GSTIN No.</span><span>{gstinNo}</span>
+                    </div>
+                    <div style={{ display: 'flex' }}>
+                      <span style={{ width: '120px' }}>Property</span><span>{property}</span>
+                    </div>
+                    <div style={{ display: 'flex' }}>
+                      <span style={{ width: '120px' }}>Centre</span><span>{centre}</span>
+                    </div>
+                    <div style={{ display: 'flex' }}>
+                      <span style={{ width: '120px' }}>Place of Service</span><span>{placeOfService}</span>
+                    </div>
+                    <div style={{ display: 'flex' }}>
+                      <span style={{ width: '120px' }}>Business Territory</span><span>{businessTerritory}</span>
+                    </div>
+                  </div>
+                  {/* Right Column */}
+                  <div style={{ width: '38%', paddingLeft: '0' }}>
+                      <div style={{ display: 'flex' }}><span style={{ width: '110px' }}>Invoice No.</span><span style={{ fontWeight: 'bold' }}>{displayInvoiceNo}</span></div>
+                      <div style={{ display: 'flex' }}><span style={{ width: '110px' }}>Invoice Date</span><span>{invoiceDate}</span></div>
+                      <div style={{ display: 'flex' }}><span style={{ width: '110px' }}>Movie Name</span><span style={{ fontWeight: 'bold' }}>{movieName}</span></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem' }}>
+                          <div><span style={{ width: '110px', display: 'inline-block' }}>Movie Version</span><span>{movieVersion}</span></div>
+                          <div style={{ fontWeight: 'bold' }}>{language}</div>
+                      </div>
+                      <div style={{ display: 'flex' }}><span style={{ width: '110px' }}>Screen Formate</span><span>{screenFormat}</span></div>
+                      <div style={{ display: 'flex' }}><span style={{ width: '110px' }}>Release Week</span><span>{week}</span></div>
+                      <div style={{ display: 'flex' }}><span style={{ width: '110px' }}>Cinema Week</span><span>{cinemaWeek}</span></div>
+                      <div style={{ display: 'flex' }}>
+                          <span style={{ width: '110px' }}>Screening Date</span>
+                          <span style={{ whiteSpace: 'nowrap' }}>From <span style={{ fontWeight: 'bold' }}>{formatDate(screeningDateFrom)}</span> To <span style={{ fontWeight: 'bold' }}>{formatDate(screeningDateTo)}</span></span>
+                      </div>
+                  </div>
+                </div>
+
+                {/* Wrapper for table and amount in words */}
+                <div style={{ border: '2px solid black', fontSize: '11px' }}>
+                  {/* Main Table Flex Container */}
+                  <div style={{ display: 'flex', width: '100%' }}>
+                      {/* Left Section */}
+                      <div style={{ width: '62%', borderRight: '2px solid black', position: 'relative' }}>
+                          {/* THIS IS THE NEW DIV FOR THE CONTINUOUS VERTICAL LINE */}
+                          <div style={{
+                              position: 'absolute',
+                              top: 0,
+                              bottom: 0,
+                              left: '45%', // Position after Date (25) + Show (10) + Aud (10)
+                              width: '1px',
+                              backgroundColor: 'black',
+                              transform: 'translateX(-0.5px)' // Center the line precisely
+                          }}></div>
+                          {/* Header */}
+                          <div style={{ display: 'flex', fontWeight: 'bold', borderBottom: '1px solid black' }}>
+                              <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '25%', borderRight: '1px solid black', borderBottom: '0' }}>Date</div>
+                              <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '10%', borderRight: '1px solid black', borderBottom: '0' }}>Show</div>
+                              <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '10%', borderBottom: '0' }}>Aud.</div>
+                              <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '20%', borderRight: '1px solid black', borderBottom: '0' }}>Collection</div>
+                              <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '35%', borderBottom: '0' }}>Deduction</div>
                           </div>
-                      ))}
+                          {/* Body */}
+                          <div style={{ borderBottom: isLast ? '1px solid black' : '0' }}>
+                            {page.rows.map((row, index) => (
+                                <div key={index} style={{ display: 'flex' }}>
+                                    <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '25%', borderRight: '1px solid black', borderBottom: '0' }}>{formatDate(row.date)}</div>
+                                    <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '10%', borderRight: '1px solid black', borderBottom: '0' }}>{row.show !== undefined ? row.show : ''}</div>
+                                    <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '10%', borderBottom: '0' }}>{row.aud !== undefined ? row.aud : ''}</div>
+                                    <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '20%', borderRight: '1px solid black', borderBottom: '0' }}>
+                                      {row.collection !== undefined ? (row.collection).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
+                                    </div>
+                                    <div className="pdf-cell-fix" style={{ ...leftCellStyle, width: '35%', padding: '0 4px', borderBottom: '0' }}>
+                                        {pIdx === 0 && index === 0 && showTaxVal > 0 && (
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', lineHeight: `${rowHeight}px`}}>
+                                                <span>Show Tax</span>
+                                                <span style={{ textAlign: 'right', paddingRight: '4px' }}>{showTaxVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                          </div>
+                          
+                          {/* Total Row & HSN Section (Only on Last Page) */}
+                          {isLast && (
+                            <>
+                              <div style={{ display: 'flex', fontWeight: 'bold' }}>
+                                  <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '25%', borderRight: '1px solid black', borderBottom: '0' }}>Total</div>
+                                  <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '10%', borderRight: '1px solid black', borderBottom: '0' }}>{totalShowVal}</div>
+                                  <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '10%', borderBottom: '0' }}>{totalAudVal}</div>
+                                  <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '20%', borderRight: '1px solid black', borderBottom: '0' }}>{totalCollectionVal.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
+                                  <div className="pdf-cell-fix" style={{ ...rightCellStyle, width: '35%', borderBottom: '0' }}>{totalDeduction.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
+                              </div>
+                              <div style={{ display: 'flex', borderTop: '2px solid black' }}>
+                                  <div style={{ width: '45%' }}>
+                                      <div style={{ ...leftCellStyle, fontWeight: 'bold', borderBottom: '1px solid black' }}>
+                                          <span className="pdf-cell-fix">HSN/SAC Code</span>
+                                      </div>
+                                      <div style={{ ...leftCellStyle, fontWeight: 'bold' }}>
+                                          <span className="pdf-cell-fix">Description</span>
+                                      </div>
+                                  </div>
+                                  <div style={{ width: '55%' }}>
+                                      <div style={{ ...leftCellStyle, borderBottom: '1px solid black' }}>
+                                          <span className="pdf-cell-fix">{hsnSacCode}</span>
+                                      </div>
+                                      <div style={{ ...leftCellStyle }}>
+                                          <span className="pdf-cell-fix">{description}</span>
+                                      </div>
+                                  </div>
+                              </div>
+                            </>
+                          )}
+                      </div>
+
+                      {/* Right Section */}
+                      <div style={{ width: '38%' }}>
+                          {/* Header */}
+                          <div style={{ display: 'flex', fontWeight: 'bold', borderBottom: '1px solid black' }}>
+                              <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '60%', borderRight: '1px solid black', borderBottom: '0' }}>Particulars</div>
+                              <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '40%', borderBottom: '0' }}>Amount</div>
+                          </div>
+                          
+                          {/* Body */}
+                          {isLast ? (
+                            <>
+                              <div style={{ display: 'flex', borderTop: '1px solid black' }}><div className="pdf-cell-fix" style={{ ...leftCellStyle, width: '60%', borderRight: '1px solid black', borderBottom: '0' }}>Total Collection</div><div className="pdf-cell-fix" style={{ ...rightCellStyle, width: '40%', borderBottom: '0' }}>{totalCollectionVal.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div></div>
+                              <div style={{ display: 'flex' }}><div className="pdf-cell-fix" style={{ ...leftCellStyle, width: '60%', borderRight: '1px solid black', borderBottom: '0' }}>Total Deduction</div><div className="pdf-cell-fix" style={{ ...rightCellStyle, width: '40%', borderBottom: '0' }}>{totalDeduction.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div></div>
+                              <div style={{ display: 'flex', borderBottom: '2px solid black' }}><div className="pdf-cell-fix" style={{ ...leftCellStyle, width: '60%', borderRight: '1px solid black', borderBottom: '0' }}>Net Collection</div><div className="pdf-cell-fix" style={{ ...rightCellStyle, width: '40%', borderBottom: '0' }}>{netCollection.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div></div>
+                              <div style={{ display: 'flex' }}><div className="pdf-cell-fix" style={{ ...leftCellStyle, height: rowHeight, width: '60%', borderRight: '1px solid black', borderBottom: '0' }}></div><div className="pdf-cell-fix" style={{ ...rightCellStyle, width: '40%', borderBottom: '0' }}></div></div>
+                              <div style={{ display: 'flex' }}><div className="pdf-cell-fix" style={{ ...leftCellStyle, width: '60%', borderRight: '1px solid black', borderBottom: '0' }}>Dist. Consideration @{distPercent}%</div><div className="pdf-cell-fix" style={{ ...rightCellStyle, width: '40%', borderBottom: '0' }}>{distConsideration.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div></div>
+                              <div style={{ display: 'flex' }}><div className="pdf-cell-fix" style={{ ...leftCellStyle, height: rowHeight, width: '60%', borderRight: '1px solid black', borderBottom: '0' }}></div><div className="pdf-cell-fix" style={{ ...rightCellStyle, width: '40%', borderBottom: '0' }}></div></div>
+                              <div style={{ display: 'flex', borderTop: '2px solid black' }}><div className="pdf-cell-fix" style={{ ...leftCellStyle, width: '60%', fontWeight:'bold', borderRight: '1px solid black', borderBottom: '0' }}>Taxable Amount</div><div className="pdf-cell-fix" style={{ ...rightCellStyle, width: '40%', fontWeight:'bold', borderBottom: '0' }}>{taxableAmount.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div></div>
+                              
+                              {gstType === 'IGST' ? (
+                                  <div style={{ display: 'flex', borderTop: '1px solid black' }}>
+                                      <div className="pdf-cell-fix" style={{ ...leftCellStyle, width: '60%', borderRight: '1px solid black', borderBottom: '0', height: rowHeight * 2, lineHeight: `${rowHeight * 2}px` }}>IGST @ {igstRateNum}%</div>
+                                      <div className="pdf-cell-fix" style={{ ...rightCellStyle, width: '40%', borderBottom: '0', height: rowHeight * 2, lineHeight: `${rowHeight * 2}px` }}>{igstVal.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
+                                  </div>
+                              ) : (
+                                  <>
+                                      <div style={{ display: 'flex', borderTop: '1px solid black' }}>
+                                          <div className="pdf-cell-fix" style={{ ...leftCellStyle, width: '60%', borderRight: '1px solid black', borderBottom: '0', height: rowHeight * 1.5, lineHeight: `${rowHeight * 1.5}px` }}>CGST @ {cgstRateNum}%</div>
+                                          <div className="pdf-cell-fix" style={{ ...rightCellStyle, width: '40%', borderBottom: '0', height: rowHeight * 1.5, lineHeight: `${rowHeight * 1.5}px` }}>{cgstVal.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
+                                      </div>
+                                      <div style={{ display: 'flex', borderTop: '1px solid black' }}>
+                                          <div className="pdf-cell-fix" style={{ ...leftCellStyle, width: '60%', borderRight: '1px solid black', borderBottom: '0', height: rowHeight * 1.5, lineHeight: `${rowHeight * 1.5}px` }}>SGST @ {sgstRateNum}%</div>
+                                          <div className="pdf-cell-fix" style={{ ...rightCellStyle, width: '40%', borderBottom: '0', height: rowHeight * 1.5, lineHeight: `${rowHeight * 1.5}px` }}>{sgstVal.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
+                                      </div>
+                                  </>
+                              )}
+
+                              <div style={{ display: 'flex', fontWeight: 'bold', borderTop: '2px solid black' }}><div className="pdf-cell-fix" style={{ ...leftCellStyle, width: '60%', borderRight: '1px solid black', borderBottom: '0' }}>Net Amount</div><div className="pdf-cell-fix" style={{ ...rightCellStyle, width: '40%', borderBottom: '0' }}>{netAmountVal.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div></div>
+                            </>
+                          ) : (
+                            page.rows.map((_, index) => (
+                              <div key={index} style={{ display: 'flex', height: rowHeight }}>
+                                <div style={{ ...leftCellStyle, width: '60%', borderRight: '1px solid black', borderBottom: '0', height: rowHeight }}></div>
+                                <div style={{ ...rightCellStyle, width: '40%', borderBottom: '0', height: rowHeight }}></div>
+                              </div>
+                            ))
+                          )}
+                      </div>
+                  </div>
+
+                  {/* Amount in Words (Only on Last Page) */}
+                  {isLast && (
+                    <div style={{ borderTop: '2px solid black', padding: '4px 8px', fontWeight: 'bold' }}>
+                        Amount in Words: {amountInWords}
                     </div>
-                    {/* Total Row */}
-                    <div style={{ display: 'flex', fontWeight: 'bold' }}>
-                        <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '25%', borderRight: '1px solid black', borderBottom: '0' }}>Total</div>
-                        <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '10%', borderRight: '1px solid black', borderBottom: '0' }}>{totalShowVal}</div>
-                        <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '10%', borderBottom: '0' }}>{totalAudVal}</div>
-                        <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '20%', borderRight: '1px solid black', borderBottom: '0' }}>{totalCollectionVal.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
-                        <div className="pdf-cell-fix" style={{ ...rightCellStyle, width: '35%', borderBottom: '0' }}>{totalDeduction.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
-                    </div>
-                    {/* HSN/SAC Section */}
-                    <div style={{ display: 'flex', borderTop: '2px solid black' }}>
-                       {/* Left Column (Labels) */}
-                        <div style={{ width: '45%' }}>
-                            <div style={{ ...leftCellStyle, fontWeight: 'bold', borderBottom: '1px solid black' }}>
-                                <span className="pdf-cell-fix">HSN/SAC Code</span>
-                            </div>
-                            <div style={{ ...leftCellStyle, fontWeight: 'bold' }}>
-                                <span className="pdf-cell-fix">Description</span>
-                            </div>
-                        </div>
-                        {/* Right Column (Values) */}
-                        <div style={{ width: '55%' }}>
-                            <div style={{ ...leftCellStyle, borderBottom: '1px solid black' }}>
-                                <span className="pdf-cell-fix">{hsnSacCode}</span>
-                            </div>
-                            <div style={{ ...leftCellStyle }}>
-                                <span className="pdf-cell-fix">{description}</span>
-                            </div>
-                        </div>
-                    </div>
+                  )}
                 </div>
 
-                {/* Right Section */}
-                <div style={{ width: '38%' }}>
-                    {/* Header */}
-                    <div style={{ display: 'flex', fontWeight: 'bold', borderBottom: '1px solid black' }}>
-                        <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '60%', borderRight: '1px solid black', borderBottom: '0' }}>Particulars</div>
-                        <div className="pdf-cell-fix" style={{ ...centerCellStyle, width: '40%', borderBottom: '0' }}>Amount</div>
-                    </div>
-                    {/* Body */}
-                    <div style={{ display: 'flex', borderTop: '1px solid black' }}><div className="pdf-cell-fix" style={{ ...leftCellStyle, width: '60%', borderRight: '1px solid black', borderBottom: '0' }}>Total Collection</div><div className="pdf-cell-fix" style={{ ...rightCellStyle, width: '40%', borderBottom: '0' }}>{totalCollectionVal.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div></div>
-                    <div style={{ display: 'flex' }}><div className="pdf-cell-fix" style={{ ...leftCellStyle, width: '60%', borderRight: '1px solid black', borderBottom: '0' }}>Total Deduction</div><div className="pdf-cell-fix" style={{ ...rightCellStyle, width: '40%', borderBottom: '0' }}>{totalDeduction.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div></div>
-                    <div style={{ display: 'flex', borderBottom: '2px solid black' }}><div className="pdf-cell-fix" style={{ ...leftCellStyle, width: '60%', borderRight: '1px solid black', borderBottom: '0' }}>Net Collection</div><div className="pdf-cell-fix" style={{ ...rightCellStyle, width: '40%', borderBottom: '0' }}>{netCollection.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div></div>
-                    <div style={{ display: 'flex' }}><div className="pdf-cell-fix" style={{ ...leftCellStyle, height: rowHeight, width: '60%', borderRight: '1px solid black', borderBottom: '0' }}></div><div className="pdf-cell-fix" style={{ ...rightCellStyle, width: '40%', borderBottom: '0' }}></div></div>
-                    <div style={{ display: 'flex' }}><div className="pdf-cell-fix" style={{ ...leftCellStyle, width: '60%', borderRight: '1px solid black', borderBottom: '0' }}>Dist. Consideration @{distPercent}%</div><div className="pdf-cell-fix" style={{ ...rightCellStyle, width: '40%', borderBottom: '0' }}>{distConsideration.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div></div>
-                    <div style={{ display: 'flex' }}><div className="pdf-cell-fix" style={{ ...leftCellStyle, height: rowHeight, width: '60%', borderRight: '1px solid black', borderBottom: '0' }}></div><div className="pdf-cell-fix" style={{ ...rightCellStyle, width: '40%', borderBottom: '0' }}></div></div>
-                    <div style={{ display: 'flex', borderTop: '2px solid black' }}><div className="pdf-cell-fix" style={{ ...leftCellStyle, width: '60%', fontWeight:'bold', borderRight: '1px solid black', borderBottom: '0' }}>Taxable Amount</div><div className="pdf-cell-fix" style={{ ...rightCellStyle, width: '40%', fontWeight:'bold', borderBottom: '0' }}>{taxableAmount.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div></div>
-                    
-                    {gstType === 'IGST' ? (
-                        <div style={{ display: 'flex', borderTop: '1px solid black' }}>
-                            <div className="pdf-cell-fix" style={{ ...leftCellStyle, width: '60%', borderRight: '1px solid black', borderBottom: '0', height: rowHeight * 2, lineHeight: `${rowHeight * 2}px` }}>IGST @ {igstRateNum}%</div>
-                            <div className="pdf-cell-fix" style={{ ...rightCellStyle, width: '40%', borderBottom: '0', height: rowHeight * 2, lineHeight: `${rowHeight * 2}px` }}>{igstVal.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
-                        </div>
-                    ) : (
-                        <>
-                            <div style={{ display: 'flex', borderTop: '1px solid black' }}>
-                                <div className="pdf-cell-fix" style={{ ...leftCellStyle, width: '60%', borderRight: '1px solid black', borderBottom: '0', height: rowHeight * 1.5, lineHeight: `${rowHeight * 1.5}px` }}>CGST @ {cgstRateNum}%</div>
-                                <div className="pdf-cell-fix" style={{ ...rightCellStyle, width: '40%', borderBottom: '0', height: rowHeight * 1.5, lineHeight: `${rowHeight * 1.5}px` }}>{cgstVal.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
-                            </div>
-                            <div style={{ display: 'flex', borderTop: '1px solid black' }}>
-                                <div className="pdf-cell-fix" style={{ ...leftCellStyle, width: '60%', borderRight: '1px solid black', borderBottom: '0', height: rowHeight * 1.5, lineHeight: `${rowHeight * 1.5}px` }}>SGST @ {sgstRateNum}%</div>
-                                <div className="pdf-cell-fix" style={{ ...rightCellStyle, width: '40%', borderBottom: '0', height: rowHeight * 1.5, lineHeight: `${rowHeight * 1.5}px` }}>{sgstVal.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
-                            </div>
-                        </>
-                    )}
-
-                    <div style={{ display: 'flex', fontWeight: 'bold', borderTop: '2px solid black' }}><div className="pdf-cell-fix" style={{ ...leftCellStyle, width: '60%', borderRight: '1px solid black', borderBottom: '0' }}>Net Amount</div><div className="pdf-cell-fix" style={{ ...rightCellStyle, width: '40%', borderBottom: '0' }}>{netAmountVal.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div></div>
-                </div>
+                {/* Remarks, Terms, Stamp, Signature (Only on Last Page) */}
+                {isLast && (
+                  <>
+                     <div style={{ marginTop: '1rem', fontSize: '11px', lineHeight: '1.5' }}>
+                          <div><b>Remark:</b> {remark}</div>
+                          <div style={{ marginTop: '0.5rem' }}><b>Terms & Conditions :-</b></div>
+                          <div style={{ paddingLeft: '1rem' }}>
+                              {typeof terms === 'string' && terms.trim() ? (
+                                <div style={{ whiteSpace: 'pre-line' }}>{terms}</div>
+                              ) : (
+                                <>
+                                  1. Payment is due within 14 days from the date invoice.Interest @18% pa. will be charged for payment delayed beyond that period.<br/>
+                                  2. All cheques / drafts should be crossed and made payable to<br/>
+                                  <div style={{ paddingLeft: '1rem' }}>
+                                      <b>FIRST FILM STUDIOS LLP</b><br/>
+                                      Bank Detail: - HDFC BANK LIMITED A/C No.: <b>50200099601176</b> IFSC CODE: <b>HDFC0000543</b><br/>
+                                      BRANCH: AHURA CENTRE, ANDHERI WEST
+                                  </div>
+                                  3. Subject to Mumbai jurisdiction
+                                </>
+                              )}
+                          </div>
+                      </div>
+                      
+                      {/* Footer: Stamp and Signature */}
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'flex-end', marginTop: '2rem', minHeight: '120px' }}>
+                           <div style={{ marginRight: '50px' }}>
+                              {stampImage ? (
+                                <img src={stampImage} alt="Stamp" style={{ width: '110px', height: '100px', objectFit: 'contain' }} />
+                              ) : (
+                                <img src="/inovice_formatting/Stamp_mum.png" alt="Stamp" style={{ width: '110px', height: '100px' }} />
+                              )}
+                           </div>
+                           <div style={{ textAlign: 'center', fontSize: '12px' }}>
+                               <b>{signatory || 'For FIRST FILM STUDIOS LLP'}</b>
+                               <div style={{ height: '60px', margin: '8px 0' }}>
+                                  {signatureImage ? (
+                                    <img src={signatureImage} alt="Signature" style={{ height: '100%', width: 'auto', maxWidth: '120px', objectFit: 'contain' }} />
+                                  ) : (
+                                    <img src="/inovice_formatting/sign.png" alt="Signature" style={{ height: '100%', width: 'auto' }} />
+                                  )}
+                                </div>
+                               <div>(Authorised Signatory)</div>
+                           </div>
+                      </div>
+                  </>
+                )}
+              </div>
             </div>
-
-            {/* Amount in Words */}
-            <div style={{ borderTop: '2px solid black', padding: '4px 8px', fontWeight: 'bold' }}>
-                Amount in Words: {amountInWords}
-            </div>
-          </div>
-
-
-           {/* Remarks, Terms, Bank */}
-           <div style={{ marginTop: '1rem', fontSize: '11px', lineHeight: '1.5' }}>
-                <div><b>Remark:</b> {remark}</div>
-                <div style={{ marginTop: '0.5rem' }}><b>Terms & Conditions :-</b></div>
-                <div style={{ paddingLeft: '1rem' }}>
-                    1. Payment is due within 14 days from the date invoice.Interest @18% pa. will be charged for payment delayed beyond that period.<br/>
-                    2. All cheques / drafts should be crossed and made payable to<br/>
-                    <div style={{ paddingLeft: '1rem' }}>
-                        <b>FIRST FILM STUDIOS LLP</b><br/>
-                        Bank Detail: - HDFC BANK LIMITED A/C No.: <b>50200099601176</b> IFSC CODE: <b>HDFC0000543</b><br/>
-                        BRANCH: AHURA CENTRE, ANDHERI WEST
-                    </div>
-                    3. Subject to Mumbai juridiction
-                </div>
-            </div>
-            
-            {/* Footer: Stamp and Signature */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'flex-end', marginTop: '2rem', minHeight: '120px' }}>
-                 <div style={{ marginRight: '50px' }}>
-                    {data?.stampImage ? (
-                      <img src={data.stampImage} alt="Stamp" style={{ width: '110px', height: '100px', objectFit: 'contain' }} />
-                    ) : (
-                      <img src="/inovice_formatting/Stamp_mum.png" alt="Stamp" style={{ width: '110px', height: '100px' }} />
-                    )}
-                 </div>
-                 <div style={{ textAlign: 'center', fontSize: '12px' }}>
-                     <b>For FIRST FILM STUDIOS LLP</b>
-                     <div style={{ height: '60px', margin: '8px 0' }}>
-                        {data?.signatureImage ? (
-                          <img src={data.signatureImage} alt="Signature" style={{ height: '100%', width: 'auto', maxWidth: '120px', objectFit: 'contain' }} />
-                        ) : (
-                          <img src="/inovice_formatting/sign.png" alt="Signature" style={{ height: '100%', width: 'auto' }} />
-                        )}
-                     </div>
-                     <div>(Authorised Signatory)</div>
-                 </div>
-            </div>
-        </div>
+          );
+        })}
       </div>
     </div>
   );
