@@ -6,7 +6,7 @@ const CGST_RATE = 0.09;
 const SGST_RATE = 0.09;
 
 interface InvoiceRow {
-  [key: string]: string | number | { [key: string]: string | number }[] | undefined;
+  [key: string]: string | number | boolean | { [key: string]: string | number }[] | undefined;
 }
 
 interface InvoiceFormProps {
@@ -15,9 +15,31 @@ interface InvoiceFormProps {
   onBannerImageChange?: (bannerImage: string) => void;
   onSignatureImageChange?: (signatureImage: string) => void;
   onStampImageChange?: (stampImage: string) => void;
+  hideLogo: boolean;
+  setHideLogo: (hide: boolean) => void;
+  hideBanner: boolean;
+  setHideBanner: (hide: boolean) => void;
+  hideStamp: boolean;
+  setHideStamp: (hide: boolean) => void;
+  hideSignature: boolean;
+  setHideSignature: (hide: boolean) => void;
 }
 
-const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview, onBannerImageChange, onSignatureImageChange, onStampImageChange }) => {
+const InvoiceForm: React.FC<InvoiceFormProps> = ({ 
+  onChange, 
+  onPreview, 
+  onBannerImageChange, 
+  onSignatureImageChange, 
+  onStampImageChange,
+  hideLogo,
+  setHideLogo,
+  hideBanner,
+  setHideBanner,
+  hideStamp,
+  setHideStamp,
+  hideSignature,
+  setHideSignature
+}) => {
   const [share, setShare] = useState<number>(45); // default 45%
   const [gstType, setGstType] = useState<'IGST' | 'CGST/SGST'>('CGST/SGST');
   const [gstRate, setGstRate] = useState<number>(18); // default 18%
@@ -73,6 +95,10 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview, onBanner
       stampImage,
       logoImage,
       headerType,
+      hideLogo,
+      hideBanner,
+      hideStamp,
+      hideSignature,
       ...updatedFields
     }));
   };
@@ -439,13 +465,26 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview, onBanner
                 id="banner-upload"
                 className="hidden"
               />
-              <button
-                type="button"
-                onClick={() => document.getElementById('banner-upload')?.click()}
-                className="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded shadow text-xs font-semibold"
-              >
-                Upload Banner
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => document.getElementById('banner-upload')?.click()}
+                  className="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded shadow text-xs font-semibold flex-1"
+                >
+                  Upload Banner
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHideBanner(!hideBanner)}
+                  className={`px-3 py-1 rounded shadow text-xs font-semibold flex-1 transition-colors ${
+                    hideBanner 
+                      ? "bg-red-500 hover:bg-red-600 text-white" 
+                      : "bg-gray-200 hover:bg-gray-300 text-gray-800"
+                  }`}
+                >
+                  {hideBanner ? "Show Banner" : "Hide Banner"}
+                </button>
+              </div>
               <span className="text-[10px] text-gray-500 font-medium">
                 Recommended: 800px × 150px. Aligned to the left. If uploading a square logo image, choose "Logo & Firm Details" header style above.
               </span>
@@ -482,13 +521,26 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview, onBanner
                 id="logo-upload"
                 className="hidden"
               />
-              <button
-                type="button"
-                onClick={() => document.getElementById('logo-upload')?.click()}
-                className="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded shadow text-xs font-semibold"
-              >
-                Upload Logo
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => document.getElementById('logo-upload')?.click()}
+                  className="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded shadow text-xs font-semibold flex-1"
+                >
+                  Upload Logo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHideLogo(!hideLogo)}
+                  className={`px-3 py-1 rounded shadow text-xs font-semibold flex-1 transition-colors ${
+                    hideLogo 
+                      ? "bg-red-500 hover:bg-red-600 text-white" 
+                      : "bg-gray-200 hover:bg-gray-300 text-gray-800"
+                  }`}
+                >
+                  {hideLogo ? "Show Logo" : "Hide Logo"}
+                </button>
+              </div>
               <span className="text-[10px] text-gray-500 font-medium">
                 Recommended width: 120px. Replaces the default logo on the left; other firm text details remain on the right.
               </span>
@@ -529,13 +581,26 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview, onBanner
               id="signature-upload"
               className="hidden"
             />
-            <button
-              type="button"
-              onClick={() => document.getElementById('signature-upload')?.click()}
-              className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded shadow text-xs"
-            >
-              Upload Signature
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => document.getElementById('signature-upload')?.click()}
+                className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded shadow text-xs flex-1"
+              >
+                Upload Signature
+              </button>
+              <button
+                type="button"
+                onClick={() => setHideSignature(!hideSignature)}
+                className={`px-3 py-1 rounded shadow text-xs font-semibold flex-1 transition-colors ${
+                  hideSignature 
+                    ? "bg-red-500 hover:bg-red-600 text-white" 
+                    : "bg-gray-200 hover:bg-gray-300 text-gray-800"
+                }`}
+              >
+                {hideSignature ? "Show Signature" : "Hide Signature"}
+              </button>
+            </div>
             {signatureImage && (
               <div className="mt-2">
                 <img 
@@ -548,7 +613,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview, onBanner
                   onClick={() => {
                     setSignatureImage("");
                     onSignatureImageChange && onSignatureImageChange("");
-                    onChange && onChange(invoices.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, stampImage })), false, bannerImage, "", stampImage);
+                    onChange && onChange(getMergedInvoices({ signatureImage: "" }), false);
                   }}
                   className="text-xs text-red-600 hover:text-red-800 mt-1"
                 >
@@ -573,13 +638,26 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview, onBanner
               id="stamp-upload"
               className="hidden"
             />
-            <button
-              type="button"
-              onClick={() => document.getElementById('stamp-upload')?.click()}
-              className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded shadow text-xs"
-            >
-              Upload Stamp
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => document.getElementById('stamp-upload')?.click()}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded shadow text-xs flex-1"
+              >
+                Upload Stamp
+              </button>
+              <button
+                type="button"
+                onClick={() => setHideStamp(!hideStamp)}
+                className={`px-3 py-1 rounded shadow text-xs font-semibold flex-1 transition-colors ${
+                  hideStamp 
+                    ? "bg-red-500 hover:bg-red-600 text-white" 
+                    : "bg-gray-200 hover:bg-gray-300 text-gray-800"
+                }`}
+              >
+                {hideStamp ? "Show Stamp" : "Hide Stamp"}
+              </button>
+            </div>
             {stampImage && (
               <div className="mt-2">
                 <img 
@@ -592,7 +670,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview, onBanner
                   onClick={() => {
                     setStampImage("");
                     onStampImageChange && onStampImageChange("");
-                    onChange && onChange(invoices.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, signatureImage })), false, bannerImage, signatureImage, "");
+                    onChange && onChange(getMergedInvoices({ stampImage: "" }), false);
                   }}
                   className="text-xs text-red-600 hover:text-red-800 mt-1"
                 >

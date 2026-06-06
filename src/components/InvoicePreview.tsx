@@ -139,6 +139,10 @@ interface InvoiceData {
   stampImage?: string; // Stamp image (base64 or URL)
   logoImage?: string; // Logo image for header
   headerType?: 'logo' | 'banner'; // Header style selector
+  hideLogo?: boolean;
+  hideBanner?: boolean;
+  hideStamp?: boolean;
+  hideSignature?: boolean;
 }
 
 const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, isPdfExport = false }) => {
@@ -199,6 +203,10 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
   const signatureImage = data?.signatureImage || "";
   const stampImage = data?.stampImage || "";
   const headerType = data?.headerType || "logo";
+  const hideLogo = data?.hideLogo ?? false;
+  const hideBanner = data?.hideBanner ?? false;
+  const hideStamp = data?.hideStamp ?? false;
+  const hideSignature = data?.hideSignature ?? false;
   const otherDeduction = data?.otherDeduction ?? 0;
   const totalShow = data?.totalShow ?? 0;
   const totalAud = data?.totalAud ?? 0;
@@ -422,7 +430,7 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
               }}
             >
               {/* Header - Banner Image or Logo + Firm Details */}
-              {headerType === 'banner' && bannerImage ? (
+              {headerType === 'banner' && bannerImage && !hideBanner ? (
                 <div style={{ width: '100%', marginBottom: '1rem', padding: '0', overflow: 'visible' }}>
                   <img 
                     src={bannerImage} 
@@ -434,7 +442,9 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
                 <div style={{ padding: '1.5rem', paddingBottom: '1rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: '1rem' }}>
                     <div style={{ width: '120px' }}>
-                      <img src={logoImage || "/inovice_formatting/1stfflogo.jpg"} alt="Logo" style={{ width: '100%', height: 'auto' }} />
+                      {!hideLogo && (
+                        <img src={logoImage || "/inovice_formatting/1stfflogo.jpg"} alt="Logo" style={{ width: '100%', height: 'auto' }} />
+                      )}
                     </div>
                     <div style={{ textAlign: 'right', fontSize: '11px', lineHeight: '1.4' }}>
                       <div style={{ fontWeight: 'bold', fontSize: '16px', marginBottom: '8px' }}>{firmName}</div>
@@ -660,20 +670,20 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
                       {/* Footer: Stamp and Signature */}
                       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'flex-end', marginTop: '2rem', minHeight: '120px' }}>
                            <div style={{ marginRight: '50px' }}>
-                              {stampImage ? (
+                              {!hideStamp && (stampImage ? (
                                 <img src={stampImage} alt="Stamp" style={{ width: '110px', height: '100px', objectFit: 'contain' }} />
                               ) : (
                                 <img src="/inovice_formatting/Stamp_mum.png" alt="Stamp" style={{ width: '110px', height: '100px' }} />
-                              )}
+                              ))}
                            </div>
                            <div style={{ textAlign: 'center', fontSize: '12px' }}>
                                <b>{signatory || 'For FIRST FILM STUDIOS LLP'}</b>
                                <div style={{ height: '60px', margin: '8px 0' }}>
-                                  {signatureImage ? (
+                                  {!hideSignature && (signatureImage ? (
                                     <img src={signatureImage} alt="Signature" style={{ height: '100%', width: 'auto', maxWidth: '120px', objectFit: 'contain' }} />
                                   ) : (
                                     <img src="/inovice_formatting/sign.png" alt="Signature" style={{ height: '100%', width: 'auto' }} />
-                                  )}
+                                  ))}
                                 </div>
                                <div>(Authorised Signatory)</div>
                            </div>

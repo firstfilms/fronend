@@ -26,6 +26,34 @@ export default function CreateInvoicePage() {
   const [stampImage, setStampImage] = useState<string>(""); // Stamp image state
   const [logoImage, setLogoImage] = useState<string>(""); // Global logo image state
   const [headerType, setHeaderType] = useState<'logo' | 'banner'>("logo"); // Global header type state
+  const [hideLogo, setHideLogo] = useState<boolean>(false);
+  const [hideBanner, setHideBanner] = useState<boolean>(false);
+  const [hideStamp, setHideStamp] = useState<boolean>(false);
+  const [hideSignature, setHideSignature] = useState<boolean>(false);
+
+  // Handler to clear all uploaded images (logo, banner, signature, stamp)
+  const clearImages = () => {
+    setBannerImage('');
+    setSignatureImage('');
+    setStampImage('');
+    setLogoImage('');
+    setHideLogo(false);
+    setHideBanner(false);
+    setHideStamp(false);
+    setHideSignature(false);
+    // Update all invoices to remove image fields
+    setInvoices(prev => prev.map(inv => ({
+      ...inv,
+      bannerImage: '',
+      signatureImage: '',
+      stampImage: '',
+      logoImage: '',
+      hideLogo: false,
+      hideBanner: false,
+      hideStamp: false,
+      hideSignature: false,
+    })));
+  };
   
   // Global states for firm details to make edits dynamic and global
   const [firmName, setFirmName] = useState<string>("FIRST FILM STUDIOS LLP");
@@ -364,6 +392,10 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner
           gst,
           pan,
           regNo,
+          hideLogo,
+          hideBanner,
+          hideStamp,
+          hideSignature,
         }} showDownloadButton={false} isPdfExport={true} />,
         filename
       );
@@ -410,6 +442,10 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner
           gst,
           pan,
           regNo,
+          hideLogo,
+          hideBanner,
+          hideStamp,
+          hideSignature,
         }} showDownloadButton={false} isPdfExport={true} />,
         filename,
         { isZipGeneration: true }
@@ -603,6 +639,10 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner
                 gst,
                 pan,
                 regNo,
+                hideLogo,
+                hideBanner,
+                hideStamp,
+                hideSignature,
               }} />
             ) : invoices.length > 0 ? (
               <InvoicePreview data={{
@@ -622,6 +662,10 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner
                 gst,
                 pan,
                 regNo,
+                hideLogo,
+                hideBanner,
+                hideStamp,
+                hideSignature,
               }} />
             ) : (
               <div className="text-gray-400 text-center w-full mt-24">Upload an Excel file to preview invoices.</div>
@@ -738,12 +782,29 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner
               </div>
             )}
           </div>
+          {/* Button to clear all uploaded images */}
+          <button
+            type="button"
+            className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-xs mt-2"
+            onClick={clearImages}
+          >
+            Clear All Images
+          </button>
+
           <InvoiceForm
             onChange={handleFormChange}
             onPreview={handlePreviewClick}
             onBannerImageChange={handleBannerImageChange}
             onSignatureImageChange={handleSignatureImageChange}
             onStampImageChange={handleStampImageChange}
+            hideLogo={hideLogo}
+            setHideLogo={setHideLogo}
+            hideBanner={hideBanner}
+            setHideBanner={setHideBanner}
+            hideStamp={hideStamp}
+            setHideStamp={setHideStamp}
+            hideSignature={hideSignature}
+            setHideSignature={setHideSignature}
           />
         </aside>
       </main>
