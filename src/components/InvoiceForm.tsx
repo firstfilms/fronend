@@ -199,11 +199,13 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview, onBanner
   };
 
   // Handle manual input field changes
-  const handleManualFieldChange = (field: string, value: string) => {
-    const updateInvoices = invoices.map(inv => ({ ...inv, [field]: value }));
-    setInvoices(updateInvoices);
-    onChange && onChange(getMergedInvoices({ [field]: value }, updateInvoices), false);
-  };
+  const handleManualFieldChange = (field: string, value: any) => {
+  // Update all invoices with the new field value
+  const updatedInvoices = invoices.map(inv => ({ ...inv, [field]: value }));
+  setInvoices(updatedInvoices);
+  // Propagate changes up to parent via onChange
+  onChange && onChange(updatedInvoices, false);
+};
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -767,7 +769,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview, onBanner
           <div>
             <label className="block text-xs font-semibold mb-1">Screening Date From</label>
             <input
-              type="text"
+              type="date"
               value={screeningDateFrom}
               onChange={(e) => {
                 const value = e.target.value;
@@ -785,7 +787,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onChange, onPreview, onBanner
           <div>
             <label className="block text-xs font-semibold mb-1">Screening Date To</label>
             <input
-              type="text"
+              type="date"
               value={screeningDateTo}
               onChange={(e) => {
                 const value = e.target.value;

@@ -147,14 +147,17 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
 
   // Prefer the explicit 'invoiceNo' field, fall back to Excel "In_no" if needed
   const displayInvoiceNo = (() => {
-    if (typeof data?.invoiceNo === 'string' && data.invoiceNo.trim()) {
-      return data.invoiceNo.trim();
+    console.log('InvoicePreview displayInvoiceNo:', data?.invoiceNo, data?.["In_no"]);
+    // Prefer explicit invoiceNo field if present
+    if (data?.invoiceNo != null) {
+      return String(data.invoiceNo).trim();
     }
-    if (data?.["In_no"] && typeof data["In_no"] === 'string' && data["In_no"].trim()) {
-      return data["In_no"].trim();
+    // Fallback to Excel "In_no" field (may be number or string)
+    if (data?.["In_no"] != null) {
+      return String(data["In_no"]).trim();
     }
-    console.warn('InvoicePreview: No invoice number found');
-    return 'No Invoice No';
+    // No invoice number available
+    return '';
   })();
   
   // Double-check: if somehow a backend invoice number got through, don't display it
@@ -270,17 +273,28 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
 
   // Generate table rows with proper date format - show ALL days between screening dates
   const generateTableRows = (): Array<{date: string; show: number; aud: number; collection: number;}> => {
-  // Use original table rows directly, preserving original values
-  if (Array.isArray(originalTableRows) && originalTableRows.length > 0) {
-    return originalTableRows.map(row => ({
-      date: formatDate(row.date),
-      show: row.show,
-      aud: row.aud,
-      collection: row.collection,
-    }));
+  console.log('originalTableRows length', originalTableRows.length);
+  console.log('originalTableRows content', originalTableRows);
+  const dateRange = generateDateRange(formatDate(screeningDateFrom), formatDate(screeningDateTo));
+  console.log('generated dateRange', dateRange);
+  const normalize = (d: string) => {
+    const parts = d.replace(/[\/\-]/g, ' ').trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return `${parts[0]}-${parts[1]}`;
+    }
+    return d;
+  };
+  if (!Array.isArray(originalTableRows) || originalTableRows.length === 0) {
+    return dateRange.map(date => ({ date, show: 0, aud: 0, collection: 0 }));
   }
-  // Fallback to empty array if no data
-  return [];
+  return dateRange.map(date => {
+    const match = originalTableRows.find(r => normalize(r.date) === normalize(date));
+    console.log('Matching date', date, 'found', !!match);
+    if (match) {
+      return { date, show: match.show, aud: match.aud, collection: match.collection };
+    }
+    return { date, show: 0, aud: 0, collection: 0 };
+  });
 };
 
   // PDF Export using standardized PDF generator
@@ -359,7 +373,13 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
   const leftCellStyle = { ...baseCellStyle, padding: '0 4px', textAlign: 'left' as const };
 
 
-  const rowsPerPage = 20;
+  // Adjust rows per page to show more data on a single page
+  const rowsPerPage = 20; // increased from 12 to accommodate more rows
+
+  // Page container size adjustments
+  // Updated height to match increased rows per page
+  // (original height was 1130px, now increased to 1500px)
+
   const totalPages = Math.max(1, Math.ceil(tableRows.length / rowsPerPage));
   const pages = [];
   for (let p = 0; p < totalPages; p++) {
@@ -391,8 +411,8 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
                 color: '#000',
                 background: '#fff',
                 width: '800px',
-                minHeight: '1130px',
-                height: '1130px',
+                minHeight: '1500px',
+                height: '1500px',
                 boxSizing: 'border-box',
                 overflow: 'hidden',
                 pageBreakAfter: pIdx < totalPages - 1 ? 'always' : 'auto',
@@ -460,7 +480,7 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
                   </div>
                   {/* Right Column */}
                   <div style={{ width: '38%', paddingLeft: '0' }}>
-                      <div style={{ display: 'flex' }}><span style={{ width: '110px' }}>Invoice No.</span><span style={{ fontWeight: 'bold' }}>{displayInvoiceNo}</span></div>
+                       <div style={{ display: 'flex' }}><span style={{ width: '110px' }}>Invoice No.</span><span style={{ fontWeight: 'bold' }}>{displayInvoiceNo}</span></div>
                       <div style={{ display: 'flex' }}><span style={{ width: '110px' }}>Invoice Date</span><span>{invoiceDate}</span></div>
                       <div style={{ display: 'flex' }}><span style={{ width: '110px' }}>Movie Name</span><span style={{ fontWeight: 'bold' }}>{movieName}</span></div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem' }}>
