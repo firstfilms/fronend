@@ -219,16 +219,21 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
   const signatory = data?.signatory ?? "For FIRST FILM STUDIOS LLP";
   const regNo = data?.regNo ?? "ACH-2259";
   const firmName = data?.firmName ?? "FIRST FILM STUDIOS LLP";
-  const address = data?.address ?? "26-104, RIDDHI SIDHI, CHS, CSR COMPLEX, OLD MHADA, KANDIVALI WEST, MUMBAI - 400067, MAHARASHTRA";
-  // Helper to format address with a max word count per line for better layout
+  const address = data?.address ?? "1105, SRI KRISHNA BUILDING, FUN REPUBLIC LANE\nVEERA DESAI, ANDHERI WEST, MUMBAI - 400052, MAHARASHTRA";
+  // Helper to format address with a max word count per line for better layout, respecting existing newlines
   const formatAddress = (addr: string, maxWords: number = 10): string => {
     if (!addr) return '';
-    const words = addr.split(/\s+/).filter(Boolean);
-    const lines: string[] = [];
-    for (let i = 0; i < words.length; i += maxWords) {
-      lines.push(words.slice(i, i + maxWords).join(' '));
-    }
-    return lines.join('\n');
+    const rawLines = addr.split('\n');
+    const formattedLines = rawLines.map(line => {
+      const words = line.split(/\s+/).filter(Boolean);
+      if (words.length <= maxWords) return line.trim();
+      const lines: string[] = [];
+      for (let i = 0; i < words.length; i += maxWords) {
+        lines.push(words.slice(i, i + maxWords).join(' '));
+      }
+      return lines.join('\n');
+    });
+    return formattedLines.filter(Boolean).join('\n');
   };
   const formattedAddress = formatAddress(address);
   const gst = data?.gst ?? "27AAJFF7915J1Z1";
@@ -452,7 +457,9 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
                       <div>{email}</div>
                       <div>GST- {gst}</div>
                       <div>PAN No:- {pan}</div>
-                      <div>LLP Reg. No.- {regNo}</div>
+                      {regNo && regNo.trim() !== "" && (
+                        <div>LLP Reg. No.- {regNo}</div>
+                      )}
                     </div>
                   </div>
                 </div>

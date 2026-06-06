@@ -57,7 +57,7 @@ export default function CreateInvoicePage() {
   
   // Global states for firm details to make edits dynamic and global
   const [firmName, setFirmName] = useState<string>("FIRST FILM STUDIOS LLP");
-  const [address, setAddress] = useState<string>("26-104, RIDDHI SIDHI, CHS, CSR COMPLEX, OLD MHADA, KANDIVALI WEST, MUMBAI - 400067, MAHARASHTRA");
+  const [address, setAddress] = useState<string>("1105, SRI KRISHNA BUILDING, FUN REPUBLIC LANE\nVEERA DESAI, ANDHERI WEST, MUMBAI - 400052, MAHARASHTRA");
   const [email, setEmail] = useState<string>("info@firstfilmstudios.com");
   const [gst, setGst] = useState<string>("27AAJFF7915J1Z1");
   const [pan, setPan] = useState<string>("AAJFF7915J");
@@ -705,7 +705,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner
                 <div>
                   <label className="block text-xs font-semibold mb-1 text-gray-700">Address</label>
                   <textarea
-                    placeholder="26-104, RIDDHI SIDHI, CHS, CSR COMPLEX, OLD MHADA, KANDIVALI WEST, MUMBAI - 400067, MAHARASHTRA"
+                    placeholder={`1105, SRI KRISHNA BUILDING, FUN REPUBLIC LANE\nVEERA DESAI, ANDHERI WEST, MUMBAI - 400052, MAHARASHTRA`}
                     value={address}
                     onChange={e => setAddress(e.target.value)}
                     className="w-full p-2 border rounded bg-white focus:outline-none text-black font-medium"
@@ -743,10 +743,10 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold mb-1 text-gray-700">LLP Reg. No.</label>
+                  <label className="block text-xs font-semibold mb-1 text-gray-700">LLP Reg. No. (Optional)</label>
                   <input
                     type="text"
-                    placeholder="ACH-2259"
+                    placeholder="Optional (e.g. ACH-2259)"
                     value={regNo}
                     onChange={e => setRegNo(e.target.value)}
                     className="w-full p-2 border rounded bg-white focus:outline-none text-black font-medium"
