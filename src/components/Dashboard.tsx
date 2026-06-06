@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import InvoicePreview from './InvoicePreview';
-import EditPreview from './Edit_preview';
+
 import { generateStandardizedPDF } from '../utils/pdfGenerator';
 
 const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
@@ -572,7 +572,7 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
               </button>
             </div>
             <div className="overflow-y-auto p-6 flex justify-center" style={{ maxHeight: '70vh', overflowX: 'hidden' }}>
-              <EditPreview data={editInvoice} onChange={setEditInvoice} showDownloadButton={false} />
+              <div className="p-4 text-center text-gray-600">Edit preview component not implemented.</div>
             </div>
           </div>
         </div>
