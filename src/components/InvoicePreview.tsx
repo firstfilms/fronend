@@ -330,9 +330,9 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
   const calculatedTotalAud = tableRows.reduce((sum, row) => sum + safeNumber(row.aud), 0);
   const calculatedTotalCollection = tableRows.reduce((sum, row) => sum + safeNumber(row.collection), 0);
   
-  const totalShowVal = calculatedTotalShow || safeNumber(totalShow) || 7;
-  const totalAudVal = calculatedTotalAud || safeNumber(totalAud) || 20;
-  const totalCollectionVal = calculatedTotalCollection || safeNumber(totalCollection) || 4175.11;
+  const totalShowVal = calculatedTotalShow || safeNumber(totalShow) || 0;
+  const totalAudVal = calculatedTotalAud || safeNumber(totalAud) || 0;
+  const totalCollectionVal = calculatedTotalCollection || safeNumber(totalCollection) || 0;
   
   const showTaxVal = safeNumber(showTax);
   const otherDeductionVal = safeNumber(otherDeduction);
