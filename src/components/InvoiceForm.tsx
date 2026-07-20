@@ -270,26 +270,25 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
         const todayStr = `${pad(today.getDate())}/${pad(today.getMonth() + 1)}/${today.getFullYear()}`;
         
         // Extract invoice number from Excel - Try multiple possible column names
-        let excelInvoiceNo = "";
+        let excelInvoiceNo: string | number = "";
         
         // Try exact matches first
-        if (row["In_no"]) excelInvoiceNo = row["In_no"];
-        else if (row["In_no "]) excelInvoiceNo = row["In_no "];
-        else if (row["In_no  "]) excelInvoiceNo = row["In_no  "];
+        if (row["In_no"] != null && row["In_no"] !== '') excelInvoiceNo = row["In_no"];
+        else if (row["In_no "] != null && row["In_no "] !== '') excelInvoiceNo = row["In_no "];
+        else if (row["In_no  "] != null && row["In_no  "] !== '') excelInvoiceNo = row["In_no  "];
         // Try common variations
-        else if (row["Inv_no"]) excelInvoiceNo = row["Inv_no"];
-        else if (row["Inv No"]) excelInvoiceNo = row["Inv No"];
-        else if (row["Invoice No"]) excelInvoiceNo = row["Invoice No"];
-        else if (row["Invoice No."]) excelInvoiceNo = row["Invoice No."];
-        else if (row["Invoice Number"]) excelInvoiceNo = row["Invoice Number"];
+        else if (row["Inv_no"] != null && row["Inv_no"] !== '') excelInvoiceNo = row["Inv_no"];
+        else if (row["Inv No"] != null && row["Inv No"] !== '') excelInvoiceNo = row["Inv No"];
+        else if (row["Invoice No"] != null && row["Invoice No"] !== '') excelInvoiceNo = row["Invoice No"];
+        else if (row["Invoice No."] != null && row["Invoice No."] !== '') excelInvoiceNo = row["Invoice No."];
+        else if (row["Invoice Number"] != null && row["Invoice Number"] !== '') excelInvoiceNo = row["Invoice Number"];
         // Try to find any column that might contain invoice numbers
         else {
           const allColumns = Object.keys(row);
           for (const col of allColumns) {
             const value = row[col];
-            if (value && typeof value === 'string' && value.trim()) {
-              // Check if this looks like an invoice number (contains letters and numbers)
-              const trimmedValue = value.trim();
+            if (value != null && value !== '') {
+              const trimmedValue = String(value).trim();
               if (/^[A-Za-z0-9]+$/.test(trimmedValue) && trimmedValue.length >= 2) {
                 excelInvoiceNo = trimmedValue;
                 console.log('Found invoice number in column:', col, 'with value:', trimmedValue);
@@ -298,13 +297,39 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
             }
           }
         }
+
+        const invoiceNoStr = excelInvoiceNo !== '' && excelInvoiceNo != null
+          ? String(excelInvoiceNo).trim()
+          : '';
         
-        if (!excelInvoiceNo) {
+        if (!invoiceNoStr) {
           console.warn('No invoice number found in Excel data. Available columns:', Object.keys(row));
           console.log('Row data:', row);
         } else {
-          console.log('Excel invoice number found:', excelInvoiceNo);
+          console.log('Excel invoice number found:', invoiceNoStr);
         }
+
+        // Normalize invoice date from Excel (Date object, serial, or string) to DD/MM/YYYY
+        const formatToDdMmYyyy = (raw: unknown): string => {
+          if (raw == null || raw === '') return todayStr;
+          if (raw instanceof Date && !isNaN(raw.getTime())) {
+            return `${pad(raw.getDate())}/${pad(raw.getMonth() + 1)}/${raw.getFullYear()}`;
+          }
+          if (typeof raw === 'number' && Number.isFinite(raw)) {
+            const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+            const d = new Date(excelEpoch.getTime() + raw * 86400000);
+            if (!isNaN(d.getTime())) {
+              return `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
+            }
+          }
+          const s = String(raw).trim();
+          if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) return s;
+          const parsed = new Date(s);
+          if (!isNaN(parsed.getTime())) {
+            return `${pad(parsed.getDate())}/${pad(parsed.getMonth() + 1)}/${parsed.getFullYear()}`;
+          }
+          return todayStr;
+        };
         
         // Build invoice fields - Excel data for non-user fields, blank for user input fields
         const invoiceFields = {
@@ -316,9 +341,9 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
           centre: row["CENTRE"] || "",
           placeOfService: row["PLACE OF SERVICE"] || "",
           businessTerritory: row["CIRCUIT"] || "",
-          invoiceNo: excelInvoiceNo, // Use Excel "In_no" directly
-          "In_no": excelInvoiceNo, // Also store as "In_no" for consistency
-          invoiceDate: row["Invoice Date"] || row["INVOICE DATE"] || todayStr,
+          invoiceNo: invoiceNoStr,
+          "In_no": invoiceNoStr,
+          invoiceDate: formatToDdMmYyyy(row["Invoice Date"] ?? row["INVOICE DATE"]),
           // User input fields - these will be filled by user on the page
           movieName: movieName || "", // Use user input or blank
           movieVersion: movieVersion || "", // Use user input or blank
@@ -350,9 +375,10 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
           const aud = Number(row[`${date} AUDIENCE`]) || Number(row[`${date} AUDIEN`]) || Number(row[`05 AUDIEN`]) || 0;
           const collection = Number(row[`${date} COLLECTION`]) || Number(row[`${date} COLLECT`]) || Number(row[`5 COLLECT`]) || 0;
           
-          // Convert date format from DD-MM to DD/MM/YYYY (assuming 2025 based on Excel data)
+          // Convert date format from DD-MM to DD/MM/YYYY using current year
           const [day, month] = date.split('-');
-          const formattedDate = `${day}/${month}/2025`;
+          const year = new Date().getFullYear();
+          const formattedDate = `${day}/${month}/${year}`;
           
           if (show || aud || collection) {
             table.push({

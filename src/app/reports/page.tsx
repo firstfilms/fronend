@@ -32,104 +32,96 @@ const ReportsPage = () => {
     return sum + (typeof collection === 'string' ? parseFloat(collection.replace(/,/g, '')) : collection);
   }, 0);
   
-  // Helper function to parse date safely for month calculations
-  const parseDateForMonth = (dateString: string) => {
-    if (!dateString) return null;
-    
-    // Handle DD/MM/YYYY format (as shown in the image)
-    if (dateString.includes('/')) {
-      const parts = dateString.split('/');
-      if (parts.length === 3) {
-        const day = parseInt(parts[0]);
-        const month = parseInt(parts[1]) - 1; // Month is 0-indexed
-        const year = parseInt(parts[2]);
-        return new Date(year, month, day);
-      }
+  // Parse DD/MM/YYYY, ISO, YYYY-MM-DD, Date objects, and Excel serials into local Date
+  const parseDate = (value: unknown): Date | null => {
+    if (value == null || value === '') return null;
+
+    if (value instanceof Date) {
+      return !isNaN(value.getTime()) ? value : null;
     }
-    
-    // Handle other formats
-    const date = new Date(dateString);
-    return !isNaN(date.getTime()) ? date : null;
-  };
 
-  const thisMonthInvoices = invoices.filter(inv => {
-    const date = inv.data?.invoiceDate || inv.createdAt;
-    if (!date) return false;
-    const invoiceDate = parseDateForMonth(date);
-    if (!invoiceDate) return false;
-    const now = new Date();
-    return invoiceDate.getMonth() === now.getMonth() && invoiceDate.getFullYear() === now.getFullYear();
-  }).length;
+    // Excel serial number (days since 1899-12-30)
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+      const date = new Date(excelEpoch.getTime() + value * 86400000);
+      return !isNaN(date.getTime())
+        ? new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+        : null;
+    }
 
-  const thisMonthRevenue = invoices.filter(inv => {
-    const date = inv.data?.invoiceDate || inv.createdAt;
-    if (!date) return false;
-    const invoiceDate = parseDateForMonth(date);
-    if (!invoiceDate) return false;
-    const now = new Date();
-    return invoiceDate.getMonth() === now.getMonth() && invoiceDate.getFullYear() === now.getFullYear();
-  }).reduce((sum, inv) => {
-    const collection = inv.data?.totalCollection || 0;
-    return sum + (typeof collection === 'string' ? parseFloat(collection.replace(/,/g, '')) : collection);
-  }, 0);
-
-  // Calculate last month statistics
-  const lastMonthInvoices = invoices.filter(inv => {
-    const date = inv.data?.invoiceDate || inv.createdAt;
-    if (!date) return false;
-    const invoiceDate = parseDateForMonth(date);
-    if (!invoiceDate) return false;
-    const now = new Date();
-    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    return invoiceDate.getMonth() === lastMonth.getMonth() && invoiceDate.getFullYear() === lastMonth.getFullYear();
-  }).length;
-
-  const lastMonthRevenue = invoices.filter(inv => {
-    const date = inv.data?.invoiceDate || inv.createdAt;
-    if (!date) return false;
-    const invoiceDate = parseDateForMonth(date);
-    if (!invoiceDate) return false;
-    const now = new Date();
-    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    return invoiceDate.getMonth() === lastMonth.getMonth() && invoiceDate.getFullYear() === lastMonth.getFullYear();
-  }).reduce((sum, inv) => {
-    const collection = inv.data?.totalCollection || 0;
-    return sum + (typeof collection === 'string' ? parseFloat(collection.replace(/,/g, '')) : collection);
-  }, 0);
-
-  // Helper function to parse date safely
-  const parseDate = (dateString: string) => {
+    const dateString = String(value).trim();
     if (!dateString) return null;
-    
-    // Handle different date formats
+
     let date: Date | null = null;
-    
-    // Try parsing as ISO string (backend format)
+
     if (dateString.includes('T') || dateString.includes('Z')) {
       date = new Date(dateString);
-    }
-    // Try parsing DD/MM/YYYY format
-    else if (dateString.includes('/')) {
+    } else if (dateString.includes('/')) {
       const parts = dateString.split('/');
       if (parts.length === 3) {
-        date = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+        // DD/MM/YYYY
+        date = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
       }
-    }
-    // Try parsing DD-MM-YYYY format
-    else if (dateString.includes('-')) {
+    } else if (dateString.includes('-')) {
       const parts = dateString.split('-');
       if (parts.length === 3) {
-        // Check if it's YYYY-MM-DD format
         if (parts[0].length === 4) {
-          date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+          // YYYY-MM-DD as local date (avoid UTC midnight shift)
+          date = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
         } else {
-          // DD-MM-YYYY format
-          date = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+          date = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
         }
       }
     }
-    
+
     return date && !isNaN(date.getTime()) ? date : null;
+  };
+
+  // Prefer Excel invoice date; fall back to when the invoice was created in the system
+  const getInvoiceDates = (inv: any): Date[] => {
+    const dates: Date[] = [];
+    const invoiceDate = parseDate(inv.data?.invoiceDate ?? inv.invoiceDate);
+    const createdAt = parseDate(inv.createdAt);
+    if (invoiceDate) dates.push(invoiceDate);
+    if (createdAt) dates.push(createdAt);
+    return dates;
+  };
+
+  const isInMonth = (dates: Date[], year: number, month: number) =>
+    dates.some(d => d.getMonth() === month && d.getFullYear() === year);
+
+  const now = new Date();
+  const thisMonthInvoices = invoices.filter(inv =>
+    isInMonth(getInvoiceDates(inv), now.getFullYear(), now.getMonth())
+  ).length;
+
+  const thisMonthRevenue = invoices
+    .filter(inv => isInMonth(getInvoiceDates(inv), now.getFullYear(), now.getMonth()))
+    .reduce((sum, inv) => {
+      const collection = inv.data?.totalCollection || 0;
+      return sum + (typeof collection === 'string' ? parseFloat(collection.replace(/,/g, '')) : collection);
+    }, 0);
+
+  const lastMonthRef = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonthInvoices = invoices.filter(inv =>
+    isInMonth(getInvoiceDates(inv), lastMonthRef.getFullYear(), lastMonthRef.getMonth())
+  ).length;
+
+  const lastMonthRevenue = invoices
+    .filter(inv => isInMonth(getInvoiceDates(inv), lastMonthRef.getFullYear(), lastMonthRef.getMonth()))
+    .reduce((sum, inv) => {
+      const collection = inv.data?.totalCollection || 0;
+      return sum + (typeof collection === 'string' ? parseFloat(collection.replace(/,/g, '')) : collection);
+    }, 0);
+
+  // Parse HTML date input (yyyy-mm-dd) as local calendar day bounds
+  const parseLocalDayStart = (yyyyMmDd: string) => {
+    const [y, m, d] = yyyyMmDd.split('-').map(Number);
+    return new Date(y, m - 1, d, 0, 0, 0, 0);
+  };
+  const parseLocalDayEnd = (yyyyMmDd: string) => {
+    const [y, m, d] = yyyyMmDd.split('-').map(Number);
+    return new Date(y, m - 1, d, 23, 59, 59, 999);
   };
 
   // Get unique movies for dropdown
@@ -141,24 +133,28 @@ const ReportsPage = () => {
 
   // Filter invoices by date range and/or movie name
   const filteredInvoices = invoices.filter(inv => {
-    // Date filter (optional)
     let dateMatch = true;
     if (startDate && endDate) {
-      const invoiceDate = parseDate(inv.data?.invoiceDate || inv.createdAt);
-      if (!invoiceDate) return false;
-      
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      
-      dateMatch = invoiceDate >= start && invoiceDate <= end;
+      const dates = getInvoiceDates(inv);
+      if (dates.length === 0) return false;
+
+      const start = parseLocalDayStart(startDate);
+      const end = parseLocalDayEnd(endDate);
+
+      // Match if Excel invoice date OR createdAt falls in the selected range
+      dateMatch = dates.some(d => d >= start && d <= end);
     }
-    
-    // Movie filter (optional)
+
     const movieMatch = !selectedMovie || inv.data?.movieName === selectedMovie;
-    
+
     return dateMatch && movieMatch;
   });
 
+  const getDisplayInvoiceNo = (inv: any) => {
+    const raw = inv.data?.["In_no"] ?? inv.data?.invoiceNo;
+    if (raw == null || raw === '') return 'No "In_no" Found';
+    return String(raw).trim() || 'No "In_no" Found';
+  };
   // Generate Excel report
   const generateExcelReport = () => {
     // Check if at least one filter is applied
@@ -511,16 +507,24 @@ const ReportsPage = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-orange-100">
-                {invoices.slice(0, 10).map((inv, idx) => (
+                {invoices.slice(0, 10).map((inv) => (
                   <tr key={inv._id} className="hover:bg-orange-50">
                     <td className="px-4 py-2 text-sm text-gray-900">
-                          {inv.data?.["In_no"] || 'No "In_no" Found'}
+                          {getDisplayInvoiceNo(inv)}
                         </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {inv.data?.clientName || inv.clientName}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {inv.data?.invoiceDate || inv.invoiceDate}
+                      {(() => {
+                        const raw = inv.data?.invoiceDate || inv.invoiceDate || inv.createdAt;
+                        const d = parseDate(raw);
+                        if (d) {
+                          const pad = (n: number) => (n < 10 ? `0${n}` : String(n));
+                          return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+                        }
+                        return raw || '-';
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       ₹{(inv.data?.totalCollection || 0).toLocaleString('en-IN')}

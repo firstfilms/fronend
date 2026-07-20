@@ -74,25 +74,53 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
       });
   }, []);
 
-  // Helper function to parse date safely
-  const parseDate = (dateString: string) => {
+  // Parse DD/MM/YYYY, ISO, Date objects, and Excel serials into local Date
+  const parseDate = (value: unknown): Date | null => {
+    if (value == null || value === '') return null;
+
+    if (value instanceof Date) {
+      return !isNaN(value.getTime()) ? value : null;
+    }
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+      const date = new Date(excelEpoch.getTime() + value * 86400000);
+      return !isNaN(date.getTime())
+        ? new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+        : null;
+    }
+
+    const dateString = String(value).trim();
     if (!dateString) return null;
-    
+
     let date: Date | null = null;
-    
+
     if (dateString.includes('T') || dateString.includes('Z')) {
       date = new Date(dateString);
     } else if (dateString.includes('/')) {
       const parts = dateString.split('/');
       if (parts.length === 3) {
-        date = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+        date = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+      }
+    } else if (dateString.includes('-')) {
+      const parts = dateString.split('-');
+      if (parts.length === 3) {
+        if (parts[0].length === 4) {
+          date = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        } else {
+          date = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+        }
       }
     }
-    
-    if (date && !isNaN(date.getTime())) {
-      return date;
-    }
-    return null;
+
+    return date && !isNaN(date.getTime()) ? date : null;
+  };
+
+  const formatDisplayDate = (value: unknown) => {
+    const d = parseDate(value);
+    if (!d) return value != null && value !== '' ? String(value) : '-';
+    const pad = (n: number) => (n < 10 ? `0${n}` : String(n));
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
   };
 
   const isToday = (date: Date) => {
@@ -105,11 +133,11 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
     const startOfWeek = new Date(today);
     startOfWeek.setDate(today.getDate() - today.getDay());
     startOfWeek.setHours(0, 0, 0, 0);
-    
+
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 6);
     endOfWeek.setHours(23, 59, 59, 999);
-    
+
     return date >= startOfWeek && date <= endOfWeek;
   };
 
@@ -118,16 +146,24 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
     return date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
   };
 
+  // Dates used for Daily/Weekly/Monthly: createdAt (when uploaded) OR Excel invoiceDate
+  const getFilterDates = (inv: any): Date[] => {
+    const dates: Date[] = [];
+    const createdAt = parseDate(inv.createdAt);
+    const invoiceDate = parseDate(inv.data?.invoiceDate ?? inv.invoiceDate);
+    if (createdAt) dates.push(createdAt);
+    if (invoiceDate) dates.push(invoiceDate);
+    return dates;
+  };
+
   // Filtered data based on search and filter
   const filteredInvoices = invoices.filter(inv => {
     const clientName = inv.data?.clientName || inv.clientName || '';
-    const displayInvoiceNo = (inv.data as any)?.["In_no"] || '';
+    const displayInvoiceNo = String((inv.data as any)?.["In_no"] ?? (inv.data as any)?.invoiceNo ?? '');
     const centre = inv.data?.centre || '';
     const placeOfService = inv.data?.placeOfService || '';
     const businessTerritory = inv.data?.businessTerritory || '';
-    const invoiceDate = inv.data?.invoiceDate || inv.invoiceDate || '';
-    const createdAt = inv.createdAt || '';
-    
+
     const matchesSearch = (
       clientName.toLowerCase().includes(search.toLowerCase()) ||
       displayInvoiceNo.toLowerCase().includes(search.toLowerCase()) ||
@@ -135,76 +171,41 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
       placeOfService.toLowerCase().includes(search.toLowerCase()) ||
       businessTerritory.toLowerCase().includes(search.toLowerCase())
     );
-    
+
     if (!matchesSearch) return false;
-    
+
     if (filter === 'Show All') {
       return true;
     }
-    
-    const invoiceDateObj = parseDate(invoiceDate) || parseDate(createdAt);
-    
-    if (!invoiceDateObj) {
-      return filter === 'Show All';
-    }
-    
-    let matchesFilter = false;
+
+    const dates = getFilterDates(inv);
+    if (dates.length === 0) return false;
+
     switch (filter) {
       case 'Daily':
-        matchesFilter = isToday(invoiceDateObj);
-        break;
+        return dates.some(isToday);
       case 'Weekly':
-        matchesFilter = isThisWeek(invoiceDateObj);
-        break;
+        return dates.some(isThisWeek);
       case 'Monthly':
-        matchesFilter = isThisMonth(invoiceDateObj);
-        break;
+        return dates.some(isThisMonth);
       default:
-        matchesFilter = true;
+        return true;
     }
-    
-    return matchesFilter;
   });
 
   // Get invoice data for InvoicePreview
   const getInvoiceData = (inv: any) => {
     if (!inv) return {};
     const data = inv.data || {};
-    
-    // Only use Excel invoice number, remove backend-generated fields
-    return {
-      ...data,
-      // Remove invoiceId and invoiceNo - only use Excel data
-    };
-  };
-
-  // Function to find Excel invoice number - ONLY use "In_no" field
-  const findExcelInvoiceNumber = (inv: any) => {
-    const data = inv.data || {};
-    
-    // ONLY use the Excel "In_no" field, nothing else
-    if (data["In_no"] && typeof data["In_no"] === 'string' && data["In_no"].trim()) {
-      const excelInvoiceNo = data["In_no"].trim();
-      console.log('Found Excel "In_no":', excelInvoiceNo);
-      return excelInvoiceNo;
-    }
-    
-    // If "In_no" is not found, return placeholder
-    console.warn('Excel "In_no" field not found for invoice:', inv._id);
-    console.log('Available fields:', Object.keys(data));
-    return 'No "In_no" Found';
+    return { ...data };
   };
 
   const displayInvoiceNo = (inv: any) => {
-    // Use the findExcelInvoiceNumber function
-    const excelInvoiceNo = findExcelInvoiceNumber(inv);
-    
-    // Debug logging
-    console.log('Dashboard - Invoice data:', inv);
-    console.log('Dashboard - Available fields:', Object.keys(inv.data || {}));
-    console.log('Dashboard - Found Excel invoice number:', excelInvoiceNo);
-    
-    return excelInvoiceNo;
+    const data = inv.data || {};
+    const raw = data["In_no"] ?? data.invoiceNo;
+    if (raw == null || raw === '') return 'No "In_no" Found';
+    const value = String(raw).trim();
+    return value || 'No "In_no" Found';
   };
 
   // Save handler for EditPreview
@@ -447,7 +448,7 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
                         <td className="px-2 py-4 text-gray-700 font-semibold truncate" title={inv.data?.businessTerritory || inv.businessTerritory || ''}>
                           {inv.data?.businessTerritory || inv.businessTerritory || '-'}
                         </td>
-                        <td className="px-2 py-4 text-gray-600 font-semibold">{inv.data?.invoiceDate || inv.invoiceDate}</td>
+                        <td className="px-2 py-4 text-gray-600 font-semibold">{formatDisplayDate(inv.data?.invoiceDate || inv.invoiceDate || inv.createdAt)}</td>
                         <td className="px-2 py-4">
                           <div className="relative actions-dropdown">
                             <button

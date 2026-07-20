@@ -1,6 +1,7 @@
 "use client";
 import styles from "./page.module.css";
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import InvoiceForm from "../../components/InvoiceForm";
 import InvoicePreview from "../../components/InvoicePreview";
 import { generateStandardizedPDF } from "../../utils/pdfGenerator";
@@ -30,6 +31,14 @@ export default function CreateInvoicePage() {
   const [hideBanner, setHideBanner] = useState<boolean>(false);
   const [hideStamp, setHideStamp] = useState<boolean>(false);
   const [hideSignature, setHideSignature] = useState<boolean>(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
+
+  useEffect(() => {
+    if (!saveMessage) return;
+    const timer = setTimeout(() => setSaveMessage(''), 3000);
+    return () => clearTimeout(timer);
+  }, [saveMessage]);
 
   // Handler to clear all uploaded images (logo, banner, signature, stamp)
   const clearImages = () => {
@@ -155,25 +164,163 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner
     setBackendInvoices(prev => prev.map((inv, i) => (i === selectedIdx ? { ...inv, [field]: value } : inv)));
   };
 
-  // New: Upload Excel and invoice data to backend
-  // Check for duplicate invoices in backend
+  // Build full invoice payload with global settings before saving
+  const buildSavePayload = (inv: any) => {
+    const invoiceNo = String(inv["In_no"] ?? inv.invoiceNo ?? '').trim();
+    return {
+      ...inv,
+      "In_no": invoiceNo,
+      invoiceNo,
+      share: inv.share ?? share,
+      gstType: inv.gstType ?? gstType,
+      gstRate: inv.gstRate ?? gstRate,
+      bannerImage: bannerImage || inv.bannerImage || '',
+      signatureImage: signatureImage || inv.signatureImage || '',
+      stampImage: stampImage || inv.stampImage || '',
+      logoImage: logoImage || inv.logoImage || '',
+      headerType: headerType || inv.headerType || 'logo',
+      terms: termsText || inv.terms,
+      signatory: signatoryText || inv.signatory,
+      firmName,
+      address,
+      email,
+      gst,
+      pan,
+      regNo,
+      hideLogo,
+      hideBanner,
+      hideStamp,
+      hideSignature,
+    };
+  };
+
+  const getCurrentInvoiceList = () =>
+    previewSource === 'backend' && backendInvoices.length > 0 ? backendInvoices : invoices;
+
+  const refreshBackendInvoices = async (savedNumbers: string[]) => {
+    const fetchRes = await fetch('/api/proxy');
+    if (!fetchRes.ok) return;
+
+    const backendAll = await fetchRes.json();
+    if (!Array.isArray(backendAll)) return;
+
+    const idsArray = savedNumbers.map(String);
+    const newBackendInvoices = backendAll
+      .filter((inv: { data: any }) => {
+        const excelInNo = inv.data?.["In_no"] != null ? String(inv.data["In_no"]) : null;
+        return excelInNo && idsArray.includes(excelInNo);
+      })
+      .map((inv: { data: any }) => ({
+        ...inv.data,
+        invoiceNo: inv.data?.["In_no"] || '',
+      }));
+
+    if (newBackendInvoices.length > 0) {
+      setBackendInvoices(newBackendInvoices);
+      setPreviewSource('backend');
+    }
+  };
+
+  // Save invoices to backend (Excel file optional — used when saving preview / copies)
+  const saveInvoicesToBackend = async (dataToSave: any[]) => {
+    if (!dataToSave.length) {
+      alert('No invoices to save. Upload an Excel file first.');
+      return false;
+    }
+
+    const payload = dataToSave.map(buildSavePayload);
+    const missingNo = payload.filter(inv => !inv["In_no"]);
+    if (missingNo.length > 0) {
+      alert('Some invoices are missing an invoice number (In_no). Please check your data.');
+      return false;
+    }
+
+    setSaving(true);
+    setSaveMessage('');
+    setUploadError('');
+
+    try {
+      const formData = new FormData();
+      formData.append('invoiceData', JSON.stringify(payload));
+
+      const fileInput = document.getElementById('excel-upload') as HTMLInputElement;
+      const file = fileInput?.files?.[0];
+      if (file) formData.append('excel', file);
+
+      const res = await fetch('/api/proxy?path=invoice-upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(errorText || 'Failed to save invoice(s)');
+      }
+
+      const uploadResponse = await res.json();
+      const savedNumbers: string[] = Array.isArray(uploadResponse.invoiceNumbers)
+        ? uploadResponse.invoiceNumbers.map(String)
+        : payload.map(inv => String(inv["In_no"]));
+
+      if (uploadResponse.failedCount > 0) {
+        setUploadError(`${uploadResponse.failedCount} invoice(s) could not be saved.`);
+      }
+
+      await refreshBackendInvoices(savedNumbers);
+      setHasUploaded(true);
+      setShowPreview(true);
+      setSaveMessage(
+        (uploadResponse.totalInvoices ?? savedNumbers.length) === 1
+          ? 'Invoice saved.'
+          : `${uploadResponse.totalInvoices ?? savedNumbers.length} invoices saved.`
+      );
+      return true;
+    } catch (err) {
+      console.error('Save error:', err);
+      const message = err instanceof Error ? err.message : 'Failed to save invoice(s)';
+      setUploadError(message);
+      alert(`Save failed: ${message}`);
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveCurrent = async () => {
+    const list = getCurrentInvoiceList();
+    if (!list.length) {
+      alert('No invoice to save.');
+      return;
+    }
+    await saveInvoicesToBackend([list[selectedIdx]]);
+  };
+
+  const handleSaveAll = async () => {
+    const list = getCurrentInvoiceList();
+    if (!list.length) {
+      alert('No invoices to save.');
+      return;
+    }
+    await saveInvoicesToBackend(list);
+  };
+
+  // Upload Excel and invoice data to backend (used by Preview flow)
+  const uploadToBackend = async (dataToUpload?: any[]) => saveInvoicesToBackend(dataToUpload ?? invoices);
+
   const checkForDuplicates = async (invoicesToCheck: any[]) => {
     try {
-      // Fetch all existing invoices from backend
       const res = await fetch('/api/proxy');
       if (!res.ok) {
         console.error('Failed to fetch backend invoices for duplicate check');
         return [];
       }
       const backendAll = await res.json();
-      // Ensure array
       if (!Array.isArray(backendAll)) return [];
       const duplicates: any[] = [];
-      // Compare based on Excel "In_no" field
       invoicesToCheck.forEach(newInv => {
         const newInNo = newInv["In_no"] || newInv.invoiceNo;
         if (!newInNo) return;
-        const existing = backendAll.find((b: any) => b.data?.["In_no"] === newInNo);
+        const existing = backendAll.find((b: any) => String(b.data?.["In_no"]) === String(newInNo));
         if (existing) {
           duplicates.push({ new: newInv, existing: existing.data });
         }
@@ -185,147 +332,34 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner
     }
   };
 
-  // New handler: skip duplicates and upload remaining invoices
-  const uploadToBackend = async (dataToUpload?: any[]) => {
-    // Use provided data or fall back to current invoices state
-    const payload = dataToUpload ?? invoices;
-    if (!payload.length) return;
-    try {
-      const fileInput = document.getElementById('excel-upload') as HTMLInputElement;
-      const file = fileInput?.files?.[0];
-      if (!file) return;
-      const formData = new FormData();
-      formData.append('excel', file);
-      formData.append('invoiceData', JSON.stringify(payload));
-
-      const res = await fetch('/api/proxy?path=invoice-upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error('Upload error:', errorText);
-        throw new Error('Failed to upload invoice');
-      }
-      const uploadResponse = await res.json();
-      if (!uploadResponse.invoiceNumbers || !Array.isArray(uploadResponse.invoiceNumbers)) {
-        console.warn('Upload response missing invoiceNumbers:', uploadResponse);
-        // Still mark as uploaded but show warning
-        setHasUploaded(true);
-        setShowPreview(true);
-        setPreviewSource('frontend');
-        return;
-      }
-
-      const fetchRes = await fetch('/api/proxy');
-      if (fetchRes.ok) {
-        const backendAll = await fetchRes.json();
-        
-        // Ensure backendAll is an array
-        if (!Array.isArray(backendAll)) {
-          console.warn('Backend response is not an array:', backendAll);
-          setHasUploaded(true);
-          setShowPreview(true);
-          setPreviewSource('frontend');
-          return;
-        }
-        
-        // Updated filtering: use invoiceNumbers if invoiceIds not provided
-        const { invoiceIds, invoiceNumbers } = uploadResponse;
-        const idsArray = (Array.isArray(invoiceIds) ? invoiceIds : (Array.isArray(invoiceNumbers) ? invoiceNumbers : [])).map(String);
-        console.log('Filtering backend invoices with ids:', idsArray);
-        console.log('Total backend invoices:', backendAll.length);
-
-        const newBackendInvoices = backendAll.filter((inv: { data: any }) => {
-          // ONLY use Excel "In_no" field for filtering
-          const excelInNo = inv.data?.["In_no"] != null ? String(inv.data["In_no"]) : null;
-          const shouldInclude = excelInNo && idsArray.includes(excelInNo);
-          console.log(`Invoice ${excelInNo}: ${shouldInclude ? 'INCLUDED' : 'EXCLUDED'}`);
-          return shouldInclude;
-        });
-        
-        console.log('Filtered backend invoices:', newBackendInvoices);
-        
-        if (newBackendInvoices.length === 0) {
-          console.warn('No matching invoices found in backend');
-          setHasUploaded(true);
-          setShowPreview(true);
-          setPreviewSource('frontend');
-          return;
-        }
-        
-        setBackendInvoices(newBackendInvoices.map((inv: { data: any }) => ({
-          ...inv.data,
-          invoiceNo: inv.data?.["In_no"] || "", // ONLY use Excel "In_no" field
-        })));
-        setSelectedIdx(0);
-        setShowPreview(true);
-        setHasUploaded(true); // Mark as uploaded
-        setUploadError(''); // Clear any previous error
-        setPreviewSource('backend');
-      } else {
-        console.error('Failed to fetch backend invoices:', fetchRes.status);
-        // Still mark as uploaded but show frontend preview
-        setHasUploaded(true);
-        setShowPreview(true);
-        setPreviewSource('frontend');
-        setUploadError(''); // Clear any previous error
-      }
-    } catch (err) {
-      console.error('Upload error:', err);
-      // Set error message for UI
-      if (err instanceof Error) {
-        setUploadError(err.message);
-      } else {
-        setUploadError(String(err));
-      }
-      // Even if upload fails, show preview with frontend data
-      console.log('Falling back to frontend preview due to upload error');
-      setHasUploaded(false);
-      setShowPreview(true);
-      setPreviewSource('frontend');
-      
-      // Show user-friendly error message
-      alert('Invoice upload failed, but you can still preview and download the invoice. Please try uploading again later.');
-    }
-  };
-
   const handlePreviewClick = async () => {
-    // Check if data has already been uploaded
+    if (!invoices.length) {
+      alert('Please upload an Excel file first.');
+      return;
+    }
+
     if (hasUploaded) {
       setShowWarningDialog(true);
       return;
     }
-    
-    // Check for duplicate invoices in backend
+
     const duplicates = await checkForDuplicates(invoices);
     if (duplicates.length > 0) {
       setDuplicateInvoices(duplicates);
       setShowWarningDialog(true);
       return;
     }
-    
-    // Show preview immediately with frontend data
+
     setShowPreview(true);
     setPreviewSource('frontend');
-    
-    // Then upload to backend and update
-    await uploadToBackend();
-    setPreviewSource('backend');
   };
 
   // Handle warning dialog confirmation
   const handleWarningConfirm = async () => {
     setShowWarningDialog(false);
-    
-    // Show preview immediately with frontend data
     setShowPreview(true);
     setPreviewSource('frontend');
-    
-    // Then upload to backend and update
     await uploadToBackend();
-    setPreviewSource('backend');
   };
 
   // Handle warning dialog cancel
@@ -347,8 +381,12 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner
     });
     setInvoices(filtered);
     setSelectedIdx(0);
-    await uploadToBackend();
+    setShowPreview(true);
     setPreviewSource('frontend');
+    if (filtered.length > 0) {
+      await uploadToBackend(filtered);
+    }
+    setDuplicateInvoices([]);
   };
 
   // Handler: Create copies of duplicates with new invoice numbers
@@ -361,13 +399,14 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner
       copy.invoiceNo = copy["In_no"];
       return copy;
     });
-    // Directly update local state with copies without uploading to backend
     setBackendInvoices([]);
     setInvoices(copies);
     setSelectedIdx(0);
     setShowPreview(true);
     setPreviewSource('frontend');
+    setHasUploaded(false);
     setDuplicateInvoices([]);
+    setSaveMessage('Copy ready. Click Save or Save All.');
   };
   // Download a single invoice as PDF
   const handleDownloadInvoice = async (inv: any, idx: number) => {
@@ -554,8 +593,35 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner
   return (
     <div className="h-screen flex flex-col bg-gray-100 overflow-hidden">
       {/* Top Bar */}
-      <div className="flex items-center justify-center px-8 py-0 bg-gradient-to-r from-orange-500 via-orange-400 to-orange-600 shadow-md border-b" style={{ height: 72 }}>
-        <h1 className="text-xl font-bold text-white text-center w-full">Invoice Creation</h1>
+      <div className="flex items-center justify-between px-4 md:px-8 bg-gradient-to-r from-orange-500 via-orange-400 to-orange-600 shadow-md border-b" style={{ height: 72 }}>
+        <Link
+          href="/"
+          className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white font-semibold px-4 py-2 rounded-lg transition-colors text-sm"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+          </svg>
+          Back
+        </Link>
+        <h1 className="text-xl font-bold text-white text-center flex-1">Invoice Creation</h1>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleSaveCurrent}
+            disabled={saving || !getCurrentInvoiceList().length}
+            className="bg-white text-orange-600 hover:bg-orange-50 disabled:bg-gray-200 disabled:text-gray-500 font-semibold px-4 py-2 rounded-lg transition-colors text-sm"
+          >
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+          <button
+            type="button"
+            onClick={handleSaveAll}
+            disabled={saving || !getCurrentInvoiceList().length}
+            className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-semibold px-4 py-2 rounded-lg transition-colors text-sm"
+          >
+            {saving ? 'Saving...' : 'Save All'}
+          </button>
+        </div>
       </div>
       <main className="flex flex-1 overflow-hidden">
         {/* Left: Invoice List */}
@@ -816,6 +882,35 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner
         </div>
       )}
 
+      {/* Toast — top right, below navbar */}
+      {saveMessage && (
+        <div
+          className={`fixed top-[80px] right-6 z-50 flex items-center gap-3 min-w-[260px] max-w-sm rounded-xl border shadow-lg px-4 py-3 ${
+            saveMessage.toLowerCase().includes('saved')
+              ? 'bg-white border-green-200 shadow-green-100/50'
+              : 'bg-white border-orange-200 shadow-orange-100/50'
+          }`}
+          role="status"
+        >
+          <div
+            className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center ${
+              saveMessage.toLowerCase().includes('saved') ? 'bg-green-100' : 'bg-orange-100'
+            }`}
+          >
+            {saveMessage.toLowerCase().includes('saved') ? (
+              <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            )}
+          </div>
+          <p className="text-sm text-gray-800 font-medium leading-snug pr-1">{saveMessage}</p>
+        </div>
+      )}
+
       {/* Warning Dialog for Duplicate Upload */}
       {showWarningDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -891,7 +986,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner
                 onClick={handleCreateCopy}
                 className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
               >
-                Create Copy
+                Create Copy (then Save)
               </button>
             </div>
           </div>
