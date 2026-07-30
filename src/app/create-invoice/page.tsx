@@ -408,11 +408,17 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner
     setDuplicateInvoices([]);
     setSaveMessage('Copy ready. Click Save or Save All.');
   };
+  // Safe PDF filename — keep display In_no as-is, but / \ break file paths
+  const toSafeFilename = (invoiceNo: string) =>
+    String(invoiceNo).trim().replace(/[\/\\?%*:|"<>]/g, '-');
+
   // Download a single invoice as PDF
   const handleDownloadInvoice = async (inv: any, idx: number) => {
     try {
       const invoiceNo = inv["In_no"] || inv.invoiceNo || '';
-      const filename = invoiceNo ? `Invoice_${invoiceNo}.pdf` : `Invoice_${Date.now()}_${idx}.pdf`;
+      const filename = invoiceNo
+        ? `Invoice_${toSafeFilename(invoiceNo)}.pdf`
+        : `Invoice_${Date.now()}_${idx}.pdf`;
       
       const { data } = await generateStandardizedPDF(
         <InvoicePreview data={{
@@ -462,7 +468,9 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner
   const generatePDFForZip = async (invoice: any, index: number): Promise<{ filename: string, data: Uint8Array }> => {
     try {
       const invoiceNo = invoice["In_no"] || invoice.invoiceNo || '';
-      const filename = invoiceNo ? `Invoice_${invoiceNo}.pdf` : `Invoice_${Date.now()}_${index}.pdf`;
+      const filename = invoiceNo
+        ? `Invoice_${toSafeFilename(invoiceNo)}.pdf`
+        : `Invoice_${Date.now()}_${index}.pdf`;
       
       const { data } = await generateStandardizedPDF(
         <InvoicePreview data={{

@@ -164,12 +164,6 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
     return '';
   })();
   
-  // Double-check: if somehow a backend invoice number got through, don't display it
-  if (displayInvoiceNo && displayInvoiceNo.toString().startsWith('INV')) {
-    console.error('BACKEND INVOICE NUMBER DETECTED IN INVOICE PREVIEW:', displayInvoiceNo);
-    // return 'INVALID - Backend Number Detected';
-  }
-  
   // Fallbacks for static values (use blank/null for new fields)
   const clientName = data?.clientName || "";
   const clientAddress = data?.clientAddress || "";
@@ -313,10 +307,13 @@ const InvoicePreview = ({ data = {} as InvoiceData, showDownloadButton = true, i
   // PDF Export using standardized PDF generator
   const handleDownloadPDF = async () => {
     try {
-      const filename = displayInvoiceNo === '-' ? `Invoice_${Date.now()}.pdf` : `Invoice_${displayInvoiceNo}.pdf`;
+      const safeName = String(displayInvoiceNo || '').replace(/[\/\\?%*:|"<>]/g, '-');
+      const filename = !displayInvoiceNo || displayInvoiceNo === '-'
+        ? `Invoice_${Date.now()}.pdf`
+        : `Invoice_${safeName}.pdf`;
       
       const { data: pdfData } = await generateStandardizedPDF(
-        <InvoicePreview data={{ ...data, invoiceNo: displayInvoiceNo }} showDownloadButton={false} isPdfExport={true} />,
+        <InvoicePreview data={{ ...data, invoiceNo: displayInvoiceNo, "In_no": displayInvoiceNo }} showDownloadButton={false} isPdfExport={true} />,
         filename
       );
       

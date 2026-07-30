@@ -271,11 +271,14 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
   const handleDownloadPDF = async (inv: any) => {
     try {
       const invoiceData = getInvoiceData(inv);
-      const exactInvoiceNo = (invoiceData as any)?.["In_no"] || '';
-      const filename = exactInvoiceNo === '-' ? `Invoice_${Date.now()}.pdf` : `Invoice_${exactInvoiceNo}.pdf`;
+      const exactInvoiceNo = String((invoiceData as any)?.["In_no"] ?? (invoiceData as any)?.invoiceNo ?? '').trim();
+      const safeName = exactInvoiceNo.replace(/[\/\\?%*:|"<>]/g, '-');
+      const filename = !exactInvoiceNo || exactInvoiceNo === '-'
+        ? `Invoice_${Date.now()}.pdf`
+        : `Invoice_${safeName}.pdf`;
       
       const { data } = await generateStandardizedPDF(
-        <InvoicePreview data={{ ...invoiceData, invoiceNo: exactInvoiceNo }} showDownloadButton={false} isPdfExport={true} />,
+        <InvoicePreview data={{ ...invoiceData, invoiceNo: exactInvoiceNo, "In_no": exactInvoiceNo }} showDownloadButton={false} isPdfExport={true} />,
         filename
       );
       

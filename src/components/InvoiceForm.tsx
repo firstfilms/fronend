@@ -244,7 +244,8 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
       const workbook = XLSX.read(data, { type: "array" });
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, { defval: "" });
+      // raw:false keeps display text so invoice nos like 2026-27/03 are not mangled
+      const rows = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, { defval: "", raw: false });
       if (!rows.length) {
         setError("No data found in Excel file.");
         return;
@@ -283,13 +284,14 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
         else if (row["Invoice No."] != null && row["Invoice No."] !== '') excelInvoiceNo = row["Invoice No."];
         else if (row["Invoice Number"] != null && row["Invoice Number"] !== '') excelInvoiceNo = row["Invoice Number"];
         // Try to find any column that might contain invoice numbers
+        // Allow formats like 2026-27/03 (slash, hyphen, dots, underscore)
         else {
           const allColumns = Object.keys(row);
           for (const col of allColumns) {
             const value = row[col];
             if (value != null && value !== '') {
               const trimmedValue = String(value).trim();
-              if (/^[A-Za-z0-9]+$/.test(trimmedValue) && trimmedValue.length >= 2) {
+              if (/^[A-Za-z0-9][A-Za-z0-9\-\/\._]*$/.test(trimmedValue) && trimmedValue.length >= 2) {
                 excelInvoiceNo = trimmedValue;
                 console.log('Found invoice number in column:', col, 'with value:', trimmedValue);
                 break;
@@ -298,6 +300,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
           }
         }
 
+        // Keep invoice number exactly as given (e.g. 2026-27/03) — never strip / or -
         const invoiceNoStr = excelInvoiceNo !== '' && excelInvoiceNo != null
           ? String(excelInvoiceNo).trim()
           : '';
