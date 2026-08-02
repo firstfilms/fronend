@@ -29,6 +29,13 @@ function normalizeHeader(header: string) {
   return (header || '').replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
+function parseExcelNumber(value: unknown): number {
+  if (value == null || value === '') return 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const n = parseFloat(String(value).replace(/,/g, '').replace(/[₹Rs\s]/gi, '').trim());
+  return Number.isFinite(n) ? n : 0;
+}
+
 // Helper: extract date from column header, e.g. "23-05 SHOW" => "23-05"
 function extractDateFromHeader(header: string): string | null {
   const match = header.match(/^([0-9]{2}-[0-9]{2})/);
@@ -95,17 +102,17 @@ export function parseInvoiceExcel(file: File): Promise<InvoiceData[]> {
           table: dayGroups.map(day => ({
             // Convert DD-MM format to DD/MM/YYYY format using current year
             date: day.date.replace('-', '/') + '/' + new Date().getFullYear(),
-            show: Number(row[day.showIdx]) || 0,
-            aud: Number(row[day.audIdx]) || 0,
-            collection: Number(row[day.collIdx]) || 0,
+            show: parseExcelNumber(row[day.showIdx]),
+            aud: parseExcelNumber(row[day.audIdx]),
+            collection: parseExcelNumber(row[day.collIdx]),
             deduction: '',
             deductionAmt: 0
           })),
-          totalShow: Number(row[totalShowIdx]) || 0,
-          totalAud: Number(row[totalAudIdx]) || 0,
-          totalCollection: Number(row[totalCollectionIdx]) || 0,
-          showTax: Number(row[showTaxIdx]) || 0,
-          otherDeduction: Number(row[otherDeductionIdx]) || 0
+          totalShow: parseExcelNumber(row[totalShowIdx]),
+          totalAud: parseExcelNumber(row[totalAudIdx]),
+          totalCollection: parseExcelNumber(row[totalCollectionIdx]),
+          showTax: parseExcelNumber(row[showTaxIdx]),
+          otherDeduction: parseExcelNumber(row[otherDeductionIdx])
         }));
 
       resolve(mapped);

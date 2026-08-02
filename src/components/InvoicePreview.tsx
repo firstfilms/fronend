@@ -32,8 +32,9 @@ import { generateStandardizedPDF } from "../utils/pdfGenerator";
 // Helper to convert number to words (simple, for INR)
 function numberToWords(num: number) {
   if (isNaN(num)) return "";
-  if (num === 0) return "Zero";
-  if (num > 999999999) return "Amount too large";
+  const abs = Math.abs(Math.floor(num));
+  if (abs === 0) return "Zero";
+  if (abs > 999999999) return "Amount too large";
   const a = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
   const b = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
   function inWords(n: number): string {
@@ -46,11 +47,11 @@ function numberToWords(num: number) {
     }
     return str;
   }
-  let crore = Math.floor(num / 10000000);
-  let lakh = Math.floor((num / 100000) % 100);
-  let thousand = Math.floor((num / 1000) % 100);
-  let hundred = Math.floor((num / 100) % 10);
-  let rest = Math.floor(num % 100);
+  let crore = Math.floor(abs / 10000000);
+  let lakh = Math.floor((abs / 100000) % 100);
+  let thousand = Math.floor((abs / 1000) % 100);
+  let hundred = Math.floor((abs / 100) % 10);
+  let rest = Math.floor(abs % 100);
   let result = "";
   if (crore) result += inWords(crore) + " Crore ";
   if (lakh) result += inWords(lakh) + " Lakh ";
@@ -63,12 +64,17 @@ function numberToWords(num: number) {
   return result.trim();
 }
 function amountToWordsWithPaise(amount: number) {
-  const rupees = Math.floor(amount);
-  const paise = Math.round((amount - rupees) * 100);
+  if (!Number.isFinite(amount)) return "Zero Rupees only";
+  const negative = amount < 0;
+  const absAmount = Math.abs(amount);
+  const rupees = Math.floor(absAmount);
+  const paise = Math.round((absAmount - rupees) * 100);
   let words = numberToWords(rupees);
   if (words) words += ' Rupees';
+  else words = 'Zero Rupees';
   if (paise > 0) words += ' and ' + numberToWords(paise) + ' Paise';
   words += ' only';
+  if (negative) words = 'Minus ' + words;
   return words;
 }
 

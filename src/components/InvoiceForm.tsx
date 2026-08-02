@@ -233,6 +233,14 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
   onChange && onChange(updatedInvoices, false);
 };
 
+  // Parse Excel numbers that may include commas / currency (e.g. "31,104.73")
+  const parseExcelNumber = (value: unknown): number => {
+    if (value == null || value === '') return 0;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+    const n = parseFloat(String(value).replace(/,/g, '').replace(/[₹Rs\s]/gi, '').trim());
+    return Number.isFinite(n) ? n : 0;
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     setSelectedFileName(file ? file.name : "");
@@ -244,7 +252,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
       const workbook = XLSX.read(data, { type: "array" });
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
-      // raw:false keeps display text so invoice nos like 2026-27/03 are not mangled
+      // raw:false keeps display text (invoice nos like 2026-27/03, and formatted amounts)
       const rows = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, { defval: "", raw: false });
       if (!rows.length) {
         setError("No data found in Excel file.");
@@ -362,21 +370,25 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
         // Build table array for all date columns dynamically
         const table: { date: string; show: number; aud: number; collection: number; deduction: string; deductionAmt: number }[] = [];
         let totalShow = 0, totalAud = 0, totalCollection = 0;
-        // Find all keys that match the pattern 'DATE SHOW', 'DATE AUDIENCE', 'DATE COLLECTION'
-        const dateShowRegex = /^([0-9]{1,2}-[0-9]{2}) SHOW$/i;
-        const dateColumns = Object.keys(row)
-          .map((key) => {
-            const match = key.match(dateShowRegex);
-            if (match) return match[1];
-            return null;
-          })
-          .filter((date): date is string => !!date);
+        // Find dates from SHOW / AUDIENCE / COLLECTION columns (e.g. "22-05 COLLECTION")
+        const dateColRegex = /^([0-9]{1,2}-[0-9]{2})\s+(SHOW|AUDIENCE|AUDIEN|COLLECTION|COLLECT)$/i;
+        const dateColumns = Array.from(new Set(
+          Object.keys(row)
+            .map((key) => {
+              const match = key.match(dateColRegex);
+              return match ? match[1] : null;
+            })
+            .filter((date): date is string => !!date)
+        ));
         // For each found date, build the row
         dateColumns.forEach((date) => {
-          const show = Number(row[`${date} SHOW`]) || 0;
-          // Try different possible column names for audience and collection
-          const aud = Number(row[`${date} AUDIENCE`]) || Number(row[`${date} AUDIEN`]) || Number(row[`05 AUDIEN`]) || 0;
-          const collection = Number(row[`${date} COLLECTION`]) || Number(row[`${date} COLLECT`]) || Number(row[`5 COLLECT`]) || 0;
+          const show = parseExcelNumber(row[`${date} SHOW`]);
+          const aud =
+            parseExcelNumber(row[`${date} AUDIENCE`]) ||
+            parseExcelNumber(row[`${date} AUDIEN`]);
+          const collection =
+            parseExcelNumber(row[`${date} COLLECTION`]) ||
+            parseExcelNumber(row[`${date} COLLECT`]);
           
           // Convert date format from DD-MM to DD/MM/YYYY using current year
           const [day, month] = date.split('-');
@@ -398,12 +410,11 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
           totalCollection += collection;
         });
         // Summary fields
-          // Filtered data
-        const totalShowVal = Number(row["TOTAL SHOW"]) || totalShow;
-        const totalAudVal = Number(row["TOTAL AUDIENCE"]) || totalAud;
-        const totalCollectionVal = Number(row["TOTAL COLLECTION"]) || totalCollection;
-        const showTax = Number(row["SHOW TAX"]) || 0;
-        const otherDeduction = Number(row["OTHERS"]) || 0;
+        const totalShowVal = parseExcelNumber(row["TOTAL SHOW"]) || totalShow;
+        const totalAudVal = parseExcelNumber(row["TOTAL AUDIENCE"]) || totalAud;
+        const totalCollectionVal = parseExcelNumber(row["TOTAL COLLECTION"]) || totalCollection;
+        const showTax = parseExcelNumber(row["SHOW TAX"]);
+        const otherDeduction = parseExcelNumber(row["OTHERS"]);
         const finalInvoice = {
           ...invoiceFields, // Use the new invoiceFields object
           table,
