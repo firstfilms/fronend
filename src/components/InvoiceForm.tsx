@@ -893,7 +893,11 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
                 const value = e.target.value;
                 setScreeningDateFrom(value);
                 // Update preview immediately on every keystroke
-                const updateInvoices = invoices.map(inv => ({ ...inv, screeningDateFrom: value }));
+                const updateInvoices = invoices.map(inv => ({
+                  ...inv,
+                  screeningDateFrom: value,
+                  screeningFrom: value,
+                }));
                 setInvoices(updateInvoices);
                 onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, signatureImage, stampImage })), false, bannerImage, signatureImage, stampImage);
               }}
@@ -911,7 +915,11 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
                 const value = e.target.value;
                 setScreeningDateTo(value);
                 // Update preview immediately on every keystroke
-                const updateInvoices = invoices.map(inv => ({ ...inv, screeningDateTo: value }));
+                const updateInvoices = invoices.map(inv => ({
+                  ...inv,
+                  screeningDateTo: value,
+                  screeningTo: value,
+                }));
                 setInvoices(updateInvoices);
                 onChange && onChange(updateInvoices.map(inv => ({ ...inv, share, gstType, gstRate, bannerImage, signatureImage, stampImage })), false, bannerImage, signatureImage, stampImage);
               }}

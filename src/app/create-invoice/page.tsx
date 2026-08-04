@@ -87,6 +87,18 @@ BRANCH: AHURA CENTRE, ANDHERI WEST
   // Handler to receive invoices and share/gst from InvoiceForm
   const handleFormChange = (data: any[], isNewUpload: boolean = false, bannerImg?: string, signatureImg?: string, stampImg?: string) => {
     setInvoices(data || []);
+    // Keep backend preview list in sync so Save doesn't drop manual fields
+    // (movie name, version, weeks, screening dates, etc. typed after preview)
+    if (!isNewUpload && data?.length) {
+      setBackendInvoices(prev => {
+        if (!prev.length) return prev;
+        return prev.map((binv, i) => ({
+          ...binv,
+          ...(data[i] || {}),
+          invoiceNo: data[i]?.["In_no"] ?? data[i]?.invoiceNo ?? binv.invoiceNo,
+        }));
+      });
+    }
     setSelectedIdx(0);
     
     // Update images if provided
@@ -165,12 +177,23 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner
   };
 
   // Build full invoice payload with global settings before saving
+  // Manual fields (movie, weeks, screening dates) are filled after preview — always persist them
   const buildSavePayload = (inv: any) => {
     const invoiceNo = String(inv["In_no"] ?? inv.invoiceNo ?? '').trim();
     return {
       ...inv,
       "In_no": invoiceNo,
       invoiceNo,
+      movieName: inv.movieName ?? '',
+      movieVersion: inv.movieVersion ?? '',
+      language: inv.language ?? '',
+      screenFormat: inv.screenFormat ?? '',
+      releaseWeek: inv.releaseWeek ?? '',
+      cinemaWeek: inv.cinemaWeek ?? '',
+      screeningFrom: inv.screeningFrom ?? inv.screeningDateFrom ?? '',
+      screeningTo: inv.screeningTo ?? inv.screeningDateTo ?? '',
+      screeningDateFrom: inv.screeningFrom ?? inv.screeningDateFrom ?? '',
+      screeningDateTo: inv.screeningTo ?? inv.screeningDateTo ?? '',
       share: inv.share ?? share,
       gstType: inv.gstType ?? gstType,
       gstRate: inv.gstRate ?? gstRate,
@@ -194,8 +217,15 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner
     };
   };
 
+  // Prefer local working list (has latest manual fields); fall back to backend list for display
   const getCurrentInvoiceList = () =>
-    previewSource === 'backend' && backendInvoices.length > 0 ? backendInvoices : invoices;
+    invoices.length > 0 ? invoices : backendInvoices;
+
+  const getSaveInvoiceList = () => {
+    // Always save from local invoices when available — they hold post-preview manual edits
+    if (invoices.length > 0) return invoices;
+    return backendInvoices;
+  };
 
   const refreshBackendInvoices = async (savedNumbers: string[]) => {
     const fetchRes = await fetch('/api/proxy');
@@ -287,16 +317,17 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner
   };
 
   const handleSaveCurrent = async () => {
-    const list = getCurrentInvoiceList();
+    const list = getSaveInvoiceList();
     if (!list.length) {
       alert('No invoice to save.');
       return;
     }
-    await saveInvoicesToBackend([list[selectedIdx]]);
+    const idx = Math.min(selectedIdx, list.length - 1);
+    await saveInvoicesToBackend([list[idx]]);
   };
 
   const handleSaveAll = async () => {
-    const list = getCurrentInvoiceList();
+    const list = getSaveInvoiceList();
     if (!list.length) {
       alert('No invoices to save.');
       return;

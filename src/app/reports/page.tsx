@@ -194,7 +194,14 @@ const ReportsPage = () => {
       // Sort dates for consistent column order
       const sortedDates = Array.from(allDates).sort();
 
-      // Prepare data for Excel
+      // Prepare data for Excel — include per-invoice details filled after preview
+      const parseAmt = (v: unknown) => {
+        if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+        if (v == null || v === '') return 0;
+        const n = parseFloat(String(v).replace(/,/g, ''));
+        return Number.isFinite(n) ? n : 0;
+      };
+
       const excelData = filteredInvoices.map((inv, index) => {
         const data = inv.data || {};
         
@@ -203,47 +210,63 @@ const ReportsPage = () => {
         const dailyCollections: { [key: string]: number } = {};
         
         table.forEach((row: any) => {
-          if (row.date && row.collection) {
-            dailyCollections[row.date] = row.collection;
+          if (row.date != null && row.date !== '') {
+            dailyCollections[row.date] = parseAmt(row.collection);
           }
         });
 
         // Calculate totals
-        const totalCollection = data.totalCollection || 0;
-        const showTax = data.showTax || 0;
-        const netAmount = totalCollection - showTax;
-        const sharePercent = data.share || 45;
+        const totalCollection = parseAmt(data.totalCollection) ||
+          Object.values(dailyCollections).reduce((s, n) => s + n, 0);
+        const showTax = parseAmt(data.showTax);
+        const otherDeduction = parseAmt(data.otherDeduction);
+        const netAmount = totalCollection - showTax - otherDeduction;
+        const sharePercent = parseAmt(data.share) || 45;
         const shareAmount = (netAmount * sharePercent) / 100;
         
         // Calculate GST
-        const gstRate = data.gstRate || 18;
+        const gstRate = parseAmt(data.gstRate) || 18;
         const gstType = data.gstType || 'CGST/SGST';
         let igst = 0, cgst = 0, sgst = 0;
         
         if (gstType === 'IGST') {
           igst = (shareAmount * gstRate) / 100;
         } else {
-          cgst = (shareAmount * gstRate) / 200; // Half of GST rate
-          sgst = (shareAmount * gstRate) / 200; // Half of GST rate
+          cgst = (shareAmount * gstRate) / 200;
+          sgst = (shareAmount * gstRate) / 200;
         }
         
         const totalNet = shareAmount + igst + cgst + sgst;
 
-        // Create row object with exact sequence as per the images
+        const invoiceNo = data["In_no"] ?? data.invoiceNo ?? '';
+        const screeningFrom = data.screeningFrom || data.screeningDateFrom || '';
+        const screeningTo = data.screeningTo || data.screeningDateTo || '';
+
+        // Create row with invoice identity + user-filled details + collections
         const rowData: any = {
           'SR. NO': index + 1,
+          'INVOICE NO': invoiceNo,
+          'INVOICE DATE': data.invoiceDate || '',
+          'MOVIE NAME': data.movieName || '',
+          'MOVIE VERSION': data.movieVersion || '',
           'LANGUAGE': data.language || '',
+          'SCREEN FORMAT': data.screenFormat || '',
+          'RELEASE WEEK': data.releaseWeek || '',
+          'CINEMA WEEK': data.cinemaWeek || '',
+          'SCREENING FROM': screeningFrom,
+          'SCREENING TO': screeningTo,
           'CINEMA NAME': data.property || '',
           'City': data.centre || '',
-          'CIRCUIT': data.businessTerritory || ''
+          'CIRCUIT': data.businessTerritory || '',
+          'CLIENT': data.clientName || '',
         };
 
-        // Add dynamic date columns in the middle (between CIRCUIT and TOTAL) with 2 decimal places
+        // Add dynamic date columns in the middle with 2 decimal places
         sortedDates.forEach(date => {
           rowData[date] = Number(dailyCollections[date] || 0).toFixed(2);
         });
 
-        // Add the remaining columns in exact order as per images with 2 decimal places
+        // Add the remaining financial columns
         rowData['TOTAL'] = Number(totalCollection).toFixed(2);
         rowData['Show Tax'] = Number(showTax).toFixed(2);
         rowData['NET'] = Number(netAmount).toFixed(2);
@@ -261,14 +284,24 @@ const ReportsPage = () => {
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(excelData);
 
-      // Set column widths dynamically with exact sequence as per images
+      // Set column widths
       const colWidths = [
         { wch: 8 },  // SR. NO
+        { wch: 16 }, // INVOICE NO
+        { wch: 12 }, // INVOICE DATE
+        { wch: 22 }, // MOVIE NAME
+        { wch: 12 }, // MOVIE VERSION
         { wch: 12 }, // LANGUAGE
+        { wch: 14 }, // SCREEN FORMAT
+        { wch: 12 }, // RELEASE WEEK
+        { wch: 12 }, // CINEMA WEEK
+        { wch: 14 }, // SCREENING FROM
+        { wch: 14 }, // SCREENING TO
         { wch: 30 }, // CINEMA NAME
         { wch: 15 }, // City
         { wch: 15 }, // CIRCUIT
-        ...sortedDates.map(() => ({ wch: 12 })), // Dynamic date columns (in middle)
+        { wch: 28 }, // CLIENT
+        ...sortedDates.map(() => ({ wch: 12 })),
         { wch: 12 }, // TOTAL
         { wch: 12 }, // Show Tax
         { wch: 12 }, // NET
