@@ -538,74 +538,173 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner
 
   const handleDownloadAll = async () => {
     try {
-    const currentInvoices = previewSource === 'backend' ? backendInvoices : invoices;
-      const selectedInvoicesData = selectedInvoices.map(idx => currentInvoices[idx]);
-      
+      const currentInvoices = invoices.length > 0 ? invoices : backendInvoices;
+      const selectedInvoicesData = selectedInvoices
+        .map(idx => currentInvoices[idx])
+        .filter(Boolean);
+
       if (selectedInvoicesData.length === 0) {
         alert('Please select at least one invoice to download.');
         return;
       }
 
-      // Show loading message
+      const getInvNo = (inv: any, fallbackIdx: number) => {
+        const no = String(inv?.["In_no"] ?? inv?.invoiceNo ?? '').trim();
+        return no || `Invoice_${fallbackIdx + 1}`;
+      };
+
+      // Auto-split into ZIP batches; each ZIP named by invoice-number range
+      const BATCH_SIZE = 40;
+      const total = selectedInvoicesData.length;
+      const batchTotal = Math.ceil(total / BATCH_SIZE);
+
+      const batchPlans = Array.from({ length: batchTotal }, (_, b) => {
+        const startIdx = b * BATCH_SIZE;
+        const endIdx = Math.min(startIdx + BATCH_SIZE, total);
+        const items = selectedInvoicesData.slice(startIdx, endIdx);
+        const firstNo = getInvNo(items[0], startIdx);
+        const lastNo = getInvNo(items[items.length - 1], endIdx - 1);
+        const allNos = items.map((inv, i) => getInvNo(inv, startIdx + i));
+        return {
+          batchNo: b + 1,
+          startIdx,
+          endIdx,
+          count: items.length,
+          firstNo,
+          lastNo,
+          allNos,
+          items,
+        };
+      });
+
+      const planText = batchPlans
+        .map(p =>
+          `ZIP ${p.batchNo}/${batchTotal}: ${p.count} PDFs\n` +
+          `  From: ${p.firstNo}\n` +
+          `  To:   ${p.lastNo}`
+        )
+        .join('\n\n');
+
+      const ok = confirm(
+        `Selected ${total} invoice(s).\n` +
+        `They will download as ${batchTotal} ZIP file(s) in sequence:\n\n` +
+        `${planText}\n\nContinue?`
+      );
+      if (!ok) return;
+
       const loadingMsg = document.createElement('div');
       loadingMsg.style.cssText = `
         position: fixed;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        background: rgba(0, 0, 0, 0.8);
+        background: rgba(0, 0, 0, 0.85);
         color: white;
-        padding: 20px;
+        padding: 20px 28px;
         border-radius: 10px;
         z-index: 10000;
         font-family: Arial, sans-serif;
-        font-size: 16px;
+        font-size: 14px;
+        text-align: left;
+        min-width: 320px;
+        max-width: 480px;
+        line-height: 1.45;
+        white-space: pre-line;
       `;
-      loadingMsg.textContent = `Generating ${selectedInvoicesData.length} PDFs for ZIP...`;
+      loadingMsg.textContent = `Preparing ${total} PDFs...`;
       document.body.appendChild(loadingMsg);
 
-      // Create ZIP file
-      const zip = new JSZip();
-      
-      // Generate PDFs and add to ZIP
-      for (let i = 0; i < selectedInvoicesData.length; i++) {
-        const invoice = selectedInvoicesData[i];
-        try {
-          const { filename, data } = await generatePDFForZip(invoice, i);
-          zip.file(filename, data);
-          
-          // Update loading message
-          loadingMsg.textContent = `Generated ${i + 1}/${selectedInvoicesData.length} PDFs...`;
-        } catch (error) {
-          console.error(`Error generating PDF for invoice ${i + 1}:`, error);
+      let successCount = 0;
+      let failCount = 0;
+      const dateStamp = new Date().toISOString().slice(0, 10);
+      const completedBatches: string[] = [];
+
+      const yieldToBrowser = () => new Promise<void>(r => setTimeout(r, 30));
+
+      const downloadBlob = (blob: Blob, name: string) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      };
+
+      const safeZipPart = (s: string) =>
+        String(s).replace(/[\/\\?%*:|"<>]/g, '-').replace(/\s+/g, '_').slice(0, 40);
+
+      for (const plan of batchPlans) {
+        const zip = new JSZip();
+        zip.file(
+          '_invoice_list.txt',
+          `ZIP ${plan.batchNo} of ${batchTotal}\n` +
+          `Invoices in this file (${plan.count}):\n` +
+          `From: ${plan.firstNo}\n` +
+          `To: ${plan.lastNo}\n\n` +
+          plan.allNos.map((n, i) => `${i + 1}. ${n}`).join('\n')
+        );
+
+        for (let i = 0; i < plan.items.length; i++) {
+          const globalIdx = plan.startIdx + i;
+          const currentNo = plan.allNos[i];
+          loadingMsg.textContent =
+            `ZIP ${plan.batchNo}/${batchTotal}\n` +
+            `Invoices: ${plan.firstNo}  →  ${plan.lastNo}\n` +
+            `Generating ${i + 1}/${plan.count}: ${currentNo}\n` +
+            `(Overall ${globalIdx + 1}/${total})`;
+          try {
+            const { filename, data } = await generatePDFForZip(plan.items[i], globalIdx);
+            const uniqueName = zip.file(filename)
+              ? filename.replace(/\.pdf$/i, `_${globalIdx + 1}.pdf`)
+              : filename;
+            zip.file(uniqueName, data);
+            successCount++;
+          } catch (error) {
+            console.error(`Error generating PDF for ${currentNo}:`, error);
+            failCount++;
+          }
+          await yieldToBrowser();
+        }
+
+        loadingMsg.textContent =
+          `Creating ZIP ${plan.batchNo}/${batchTotal}...\n` +
+          `${plan.firstNo}  →  ${plan.lastNo}`;
+
+        const zipBlob = await zip.generateAsync({
+          type: 'blob',
+          compression: 'DEFLATE',
+          compressionOptions: { level: 4 },
+        });
+
+        const zipName = batchTotal === 1
+          ? `Invoices_${safeZipPart(plan.firstNo)}_to_${safeZipPart(plan.lastNo)}_${dateStamp}.zip`
+          : `Invoices_ZIP${plan.batchNo}-of-${batchTotal}_${safeZipPart(plan.firstNo)}_to_${safeZipPart(plan.lastNo)}.zip`;
+
+        downloadBlob(zipBlob, zipName);
+        completedBatches.push(
+          `ZIP ${plan.batchNo}: ${plan.firstNo} → ${plan.lastNo} (${plan.count} PDFs)`
+        );
+
+        if (plan.batchNo < batchTotal) {
+          await new Promise(r => setTimeout(r, 700));
         }
       }
 
-      // Generate and download ZIP
-      loadingMsg.textContent = 'Creating ZIP file...';
-      const zipBlob = await zip.generateAsync({ 
-        type: 'blob',
-        compression: 'DEFLATE',
-        compressionOptions: { level: 6 } // Balanced compression
-      });
-      
-      // Download ZIP file
-      const url = URL.createObjectURL(zipBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `Invoices_Batch_${new Date().toISOString().slice(0, 10)}.zip`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      if (document.body.contains(loadingMsg)) {
+        document.body.removeChild(loadingMsg);
+      }
 
-      // Remove loading message
-      document.body.removeChild(loadingMsg);
-      
-      alert(`Successfully downloaded ${selectedInvoicesData.length} invoices as ZIP file!`);
+      alert(
+        `Download complete.\nSaved: ${successCount}  |  Failed: ${failCount}\n\n` +
+        completedBatches.join('\n')
+      );
     } catch (error) {
       console.error('ZIP generation error:', error);
-      alert('Error generating ZIP file. Please try again.');
+      const leftover = document.querySelector('div[style*="z-index: 10000"]');
+      if (leftover && leftover.parentNode) leftover.parentNode.removeChild(leftover);
+      alert('Error generating ZIP file. Try again, or select fewer invoices at a time.');
     }
   };
 

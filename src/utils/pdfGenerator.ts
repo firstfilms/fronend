@@ -132,8 +132,9 @@ export const generateStandardizedPDF = async (
     const reactRoot = createRoot(hiddenDiv);
     reactRoot.render(component);
 
-    // Wait for render and images to load
-    await new Promise(r => setTimeout(r, 800));
+    // Wait for render and images to load (shorter for bulk ZIP)
+    const settleMs = options.isZipGeneration ? 250 : 800;
+    await new Promise(r => setTimeout(r, settleMs));
 
     // Apply cell alignment fixes
     const tableCells = hiddenDiv.querySelectorAll('.pdf-cell-fix');
@@ -146,7 +147,9 @@ export const generateStandardizedPDF = async (
     // Wait for all images to load
     await waitForImagesToLoad(hiddenDiv);
     
-    const scale = options.customScale || PDF_GENERATION_CONFIG.canvas.scale;
+    // Lower scale for bulk ZIP to keep memory usable at 100–300 invoices
+    const scale = options.customScale
+      ?? (options.isZipGeneration ? 1.5 : PDF_GENERATION_CONFIG.canvas.scale);
     
     // Create PDF with standardized settings
     const pdf = new jsPDF({
